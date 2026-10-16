@@ -44,5 +44,5 @@ The frontend calls the deployed Railway backend by default. To use your local ba
 
 ## Deployment
 
-- **Frontend:** GitHub Pages serves the `docs/` folder from `main` at https://mallanic-cmu.github.io/starstruck-interview-practice-tool/. Pushing to `main` updates the site.
+- **Frontend:** GitHub Pages serves the `docs/` folder from `main` at https://starstruck-cmu.github.io/starstruck-interview-practice-tool/. Pushing to `main` updates the site.
 - **Backend:** Railway runs the `backend/` folder. Set `GEMINI_API_KEY` in Railway's variables.
