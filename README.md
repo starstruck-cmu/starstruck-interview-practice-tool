@@ -31,7 +31,7 @@ The backend runs at `http://127.0.0.1:8000`.
 
 **Terminal 2: frontend**
 ```bash
-cd frontend
+cd docs
 python3 -m http.server 5500
 ```
 Open `http://localhost:5500` in your browser. Use `localhost`, not a double-click on the file, so the camera works.
@@ -40,4 +40,9 @@ Open `http://localhost:5500` in your browser. Use `localhost`, not a double-clic
 
 - `GEMINI_API_KEY` (required): your Gemini API key
 
-To point the frontend at a different backend, change `API` at the top of `frontend/app.js`.
+The frontend calls the deployed Railway backend by default. To use your local backend instead, change `API` at the top of `docs/app.js` to `http://127.0.0.1:8000`.
+
+## Deployment
+
+- **Frontend:** GitHub Pages serves the `docs/` folder from `main` at https://mallanic-cmu.github.io/starstruck-interview-practice-tool/. Pushing to `main` updates the site.
+- **Backend:** Railway runs the `backend/` folder. Set `GEMINI_API_KEY` in Railway's variables.
