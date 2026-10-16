@@ -13,8 +13,8 @@
    1. SETTINGS
    ===================================================== */
 
-// Backend address. Change this when you deploy the backend.
-const API = "http://127.0.0.1:8000";
+// Backend address.
+const API = "https://starstruck-interview-practice-tool-production.up.railway.app";
 
 // The question the user answers.
 const QUESTION = "What makes you qualified for this job?";
