@@ -12,7 +12,7 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 # Admin password for the admin panel.
-ADMIN_PASSWORD = "1235"
+ADMIN_PASSWORD = "1234"
 
 # Debug mode. Set DEBUG=1 to print Gemini responses in the terminal. Leave it off in production.
 DEBUG = os.environ.get("DEBUG") == "1"

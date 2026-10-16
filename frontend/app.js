@@ -13,7 +13,7 @@
    1. SETTINGS
    ===================================================== */
 
-// Backend address.
+// Backend address (the deployed Railway backend).
 const API = "https://starstruck-interview-practice-tool-production.up.railway.app";
 
 // The question the user answers.
@@ -117,6 +117,12 @@ startBtn.addEventListener("click", async () => {
     recordingDone = Promise.all([videoStopped, audioStopped]).then(() => {
       audioBlob = new Blob(audioChunks, { type: "audio/webm" });
       const videoBlob = new Blob(videoChunks, { type: "video/webm" });
+      console.log("Recording sizes:", { video: videoBlob.size, audio: audioBlob.size, videoChunks: videoChunks.length, audioChunks: audioChunks.length });
+
+      if (videoBlob.size === 0 || audioBlob.size === 0) {
+        audioBlob = null;
+        showFeedback("The recording came out empty. Check that your camera and mic are working, record for a few seconds, and try again.");
+      }
 
       // Replace the live camera with the replay, in the same box.
       video.srcObject = null;
@@ -126,11 +132,11 @@ startBtn.addEventListener("click", async () => {
 
       // Turn off the camera and mic.
       stream.getTracks().forEach((track) => track.stop());
-      submitRecBtn.disabled = false;
+      submitRecBtn.disabled = !audioBlob;
     });
 
-    videoRecorder.start();
-    audioRecorder.start();
+    videoRecorder.start(1000);
+    audioRecorder.start(1000);
     startBtn.disabled = true;
     stopBtn.disabled = false;
     submitRecBtn.disabled = true;
