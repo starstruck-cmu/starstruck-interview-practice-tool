@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interview Practice</title>
+
+  <!-- Styles live in style.css -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== HEADER ===== -->
+  <div class="header">
+    <h1>Interview Practice</h1>
+    <button id="adminToggle">Admin</button>
+  </div>
+
+  <!-- ===== ADMIN PANEL (opens over the top right; hidden until the Admin button is clicked) ===== -->
+  <div id="admin">
+    <h2>Admin</h2>
+
+    <!-- Step 1: password -->
+    <div id="adminLogin">
+      <input id="password" type="password" placeholder="Admin password">
+      <button id="loginBtn">Log in</button>
+    </div>
+
+    <!-- Step 2: shown after a successful login -->
+    <div id="adminEditor">
+      <h3>LLM prompt</h3>
+      <textarea id="adminPrompt"></textarea>
+      <br>
+      <button id="saveBtn">Save prompt</button>
+
+      <h3>Recent answers sent to the LLM</h3>
+      <button id="loadSubsBtn">Load recent answers</button>
+      <div id="submissions"></div>
+    </div>
+
+    <div id="adminMessage" class="message"></div>
+  </div>
+
+  <!-- ===== MAIN PAGE ===== -->
+  <div class="layout">
+
+    <!-- Left column: question, recording, typed answer -->
+    <div class="panel">
+
+      <!-- Question shown to the user. To change it, edit QUESTION in app.js. -->
+      <h2>Question</h2>
+      <p id="questionText">What makes you qualified for this job?</p>
+
+      <!-- Recording section -->
+      <h2>Record your answer</h2>
+      <button id="startBtn">Start recording</button>
+      <button id="stopBtn" disabled>Stop recording</button>
+      <button id="submitRecBtn" disabled>Submit recording</button>
+
+      <!-- Shows the live camera while recording, then the recording to watch back -->
+      <video id="video" playsinline></video>
+
+      <!-- Typed answer section (an option for people who don't want to record) -->
+      <h2>Or type your answer</h2>
+      <textarea id="answer" placeholder="Type your answer here"></textarea>
+      <br>
+      <button id="submitTyped">Submit typed answer</button>
+
+    </div>
+
+    <!-- Right column: feedback from the backend -->
+    <div class="panel">
+      <h2>Feedback</h2>
+      <div id="feedback"></div>
+    </div>
+
+  </div>
+
+  <!-- Behavior lives in app.js -->
+  <script src="app.js"></script>
+</body>
+</html>

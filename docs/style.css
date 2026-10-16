@@ -1,0 +1,148 @@
+/* =====================================================
+   STYLE.CSS
+   Black and white starter styles. Change colors and
+   sizes here. Everything uses plain CSS.
+   ===================================================== */
+
+/* ---------- Page layout ---------- */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 15px;
+  background: #fff;
+  color: #000;
+  margin: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;            /* keeps the whole page on one screen */
+}
+
+/* Header row: title on the left, Admin button on the right */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Two columns that fill the rest of the screen */
+.layout {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  margin-top: 10px;
+}
+
+/* Each column. Scrolls on its own if its content is long. */
+.panel {
+  border: 1px solid #000;
+  padding: 10px;
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* ---------- Text ---------- */
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 17px; margin: 10px 0 4px; }
+h3 { font-size: 15px; margin: 10px 0 4px; }
+p  { margin: 4px 0; }
+
+/* ---------- Inputs ---------- */
+textarea {
+  width: 100%;
+  border: 1px solid #000;
+  padding: 6px;
+  font-size: 15px;
+  resize: none;
+}
+
+#answer      { height: 90px; }
+#adminPrompt { height: 140px; }
+
+input {
+  border: 1px solid #000;
+  padding: 5px;
+  font-size: 15px;
+}
+
+/* ---------- Buttons ---------- */
+button {
+  margin-top: 6px;
+  margin-right: 4px;
+  padding: 6px 12px;
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+button:disabled {
+  color: #888;
+  border-color: #888;
+  cursor: default;
+}
+
+/* ---------- Recording preview and replay ---------- */
+#video {
+  width: 100%;
+  height: 200px;
+  object-fit: contain;
+  border: 1px solid #000;
+  margin-top: 6px;
+  background: #fff;
+}
+
+/* ---------- Feedback ---------- */
+#feedback {
+  white-space: pre-wrap;       /* keeps line breaks from the LLM */
+}
+
+/* ---------- Admin panel ---------- */
+/* Opens as a box over the top right so it doesn't push the page down */
+#admin {
+  display: none;
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  width: 360px;
+  max-height: 75vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #000;
+  padding: 12px;
+  z-index: 10;
+}
+
+#adminEditor {
+  display: none;
+  margin-top: 8px;
+}
+
+.message {
+  margin-top: 6px;
+}
+
+#submissions {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.submission {
+  border: 1px solid #000;
+  padding: 6px;
+  margin-top: 6px;
+}
+
+.submission p {
+  white-space: pre-wrap;
+}
