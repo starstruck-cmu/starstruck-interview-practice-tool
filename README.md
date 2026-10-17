@@ -1,6 +1,6 @@
 # STARstruck Interview Practice Tool
 
-A web app that helps job seekers practice interview questions and get feedback on their answers. It was built for a CMU class project with HAAPE (Helping Adults with Autism Perform and Excel), with a focus on neuroinclusive design. Feedback focuses on the content of answers, and the app is self-paced and private.
+A web app that helps job seekers practice interview questions and get feedback on their answers. Developed for CMU's Introduction to Accessibility and Assistive Technology (17-332/732, 05-332/632) course, taught by Professor Andrew Begel, in collaboration with HAAPE (Helping Adults with Autism Perform and Excel). The app emphasizes neuroinclusive design, providing content-focused feedback in a private, self-paced environment.
 
 ## Setup
 
