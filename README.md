@@ -1,6 +1,6 @@
 # STARstruck Interview Practice
 
-A web app that helps job seekers practice interview questions and get feedback on their answers. It was built for a CMU class project with HAAPE (Helping Autistic and ADHD People Enter the workforce), with a focus on neuroinclusive design. Feedback focuses on the content of answers, and the app is self-paced and private.
+A web app that helps job seekers practice interview questions and get feedback on their answers. It was built for a CMU class project with HAAPE (Helping Adults with Autism Perform and Excel), with a focus on neuroinclusive design. Feedback focuses on the content of answers, and the app is self-paced and private.
 
 ## Setup
 
