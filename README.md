@@ -2,6 +2,14 @@
 
 A web app that helps job seekers practice interview questions and get feedback on their answers. Developed for CMU's Introduction to Accessibility and Assistive Technology (17-332/732, 05-332/632) course, taught by Professor Andrew Begel, in collaboration with HAAPE (Helping Adults with Autism Perform and Excel). The app emphasizes neuroinclusive design, providing content-focused feedback in a private, self-paced environment.
 
+## Live Demo
+
+You can access the latest deployed version of the STARstruck Interview Practice Tool here:
+
+**https://starstruck-cmu.github.io/starstruck-interview-practice-tool/**
+
+The frontend is hosted on **GitHub Pages**, and the backend is hosted on **Railway**. The live site is updated when changes are pushed to `main` and deployment completes. You can try the app directly through the link above without setting it up locally.
+
 ## Setup
 
 You need Python 3.10 or newer and a Gemini API key.
