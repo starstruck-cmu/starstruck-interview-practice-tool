@@ -3,78 +3,487 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Interview Practice</title>
+  <title>STARstruck</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- Styles live in style.css -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ===== HEADER ===== -->
-  <div class="header">
-    <h1>Interview Practice</h1>
-    <button id="adminToggle">Admin</button>
-  </div>
+  <!-- ===== TOP BAR: name, progress steps, preferences ===== -->
+  <header class="topbar">
+    <span class="brand">
+      <!-- Logo: a little robot in an interview, with a speech bubble -->
+      <svg class="brand-logo" viewBox="0 0 40 32" aria-hidden="true">
+        <line x1="13" y1="3" x2="13" y2="7" />
+        <circle cx="13" cy="2.5" r="1.6" class="fill" />
+        <rect x="4" y="7" width="18" height="14" rx="4" />
+        <circle cx="10" cy="13" r="1.6" class="fill" />
+        <circle cx="16" cy="13" r="1.6" class="fill" />
+        <path d="M10 17.5q3 2 6 0" />
+        <path d="M8 21v3h10v-3" />
+        <path d="M13 24l-1.5 4h3z" class="fill" />
+        <path d="M26 4h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-6l-3 3v-3h-2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+        <circle cx="28.5" cy="9" r="0.9" class="fill" />
+        <circle cx="31.5" cy="9" r="0.9" class="fill" />
+        <circle cx="34.5" cy="9" r="0.9" class="fill" />
+      </svg>
+      STARstruck
+    </span>
+    <ol class="steps" id="steps" aria-label="Progress">
+      <li data-step="home">Resume</li>
+      <li data-step="setup">Set up</li>
+      <li data-step="practice">Practice</li>
+      <li data-step="summary">Summary</li>
+      <li data-step="experience" class="extra"><button class="step-btn" data-open="experience" disabled title="Finish a practice session to unlock"><svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Experience</button></li>
+      <li data-step="progress" class="extra"><button class="step-btn" data-open="progress" disabled title="Finish a practice session to unlock"><svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Progress</button></li>
+    </ol>
+    <button class="btn" id="prefsButton">Preferences</button>
+  </header>
 
-  <!-- ===== ADMIN PANEL (opens over the top right; hidden until the Admin button is clicked) ===== -->
-  <div id="admin">
-    <h2>Admin</h2>
+  <main>
 
-    <!-- Step 1: password -->
-    <div id="adminLogin">
-      <input id="password" type="password" placeholder="Admin password">
-      <button id="loginBtn">Log in</button>
+    <!-- ===== HOME ===== -->
+    <section class="view" id="view-home">
+      <h1 class="hero">Build confidence through practice.</h1>
+
+      <div class="card card-dashed narrow">
+        <h3 class="card-title">Upload your resume</h3>
+
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="resumeInput" accept=".pdf,.docx,.txt" hidden>
+          <span class="drop-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="40" height="40"><path d="M12 16V4m0 0-5 5m5-5 5 5M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <strong>Drag and drop your resume here</strong>
+          <strong>or <span class="link">browse files</span></strong>
+          <span class="small">PDF or DOCX, up to 10 MB</span>
+        </label>
+
+        <div class="file-chip" id="resumeChip" hidden>
+          <span class="file-icon" aria-hidden="true"></span>
+          <span id="resumeName"></span>
+          <button class="link-btn" id="removeResume">Remove</button>
+        </div>
+        <p class="status" id="resumeStatus" role="status"></p>
+
+        <!-- Shown when a file can't be read -->
+        <div class="notice" id="resumeError" hidden>
+          <h3>This file could not be read</h3>
+          <p>Try another file, or paste your resume text.</p>
+          <textarea id="resumePaste" rows="5" placeholder="Paste your resume text here"></textarea>
+          <button class="btn" id="usePasted">Use this text</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SET UP ===== -->
+    <section class="view" id="view-setup" hidden>
+      <div class="column">
+        <h1>Set up your practice</h1>
+        <p class="focus-note" id="focusNote" hidden></p>
+
+        <fieldset class="panel">
+          <legend>What would you like to practice?</legend>
+          <div class="choices">
+            <label class="option"><input type="radio" name="focus" value="general" checked> General interview questions</label>
+            <label class="option"><input type="radio" name="focus" value="job"> A particular job</label>
+          </div>
+          <div class="job-fields" id="jobFields" hidden>
+            <div class="job-row">
+              <div>
+                <label class="field-label" for="jobTitle">Job title (optional)</label>
+                <input class="input input-compact" id="jobTitle">
+              </div>
+              <div>
+                <div class="label-row">
+                  <label class="field-label" for="jobDescription">Job description</label>
+                  <label class="small">or <span class="link">browse files</span>
+                    <input type="file" id="jobFile" accept=".pdf,.docx,.txt" hidden>
+                  </label>
+                </div>
+                <textarea class="input input-compact" id="jobDescription" rows="2"></textarea>
+              </div>
+            </div>
+            <p class="status" id="jobStatus" role="status"></p>
+          </div>
+        </fieldset>
+
+        <fieldset class="panel">
+          <legend>How would you like to answer?</legend>
+          <div class="choices">
+            <label class="option option-icon"><input type="radio" name="setupInput" value="type"><span class="icons"><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"/></svg></span> Type</label>
+            <label class="option option-icon"><input type="radio" name="setupInput" value="speak"><span class="icons"><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="7" width="13" height="10" rx="2"/><path d="m15 11 6-3v8l-6-3"/></svg><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span> Speak</label>
+          </div>
+        </fieldset>
+
+        <fieldset class="panel">
+          <legend>Session</legend>
+          <div class="row-2">
+            <label class="option"><input type="radio" name="setupCount" value="1"> 1 question</label>
+            <label class="option"><input type="radio" name="setupCount" value="3"> 3 questions</label>
+          </div>
+          <div class="stack-tight">
+            <label class="toggle-row" for="setupSmallTalk">
+              <span class="switch"><input type="checkbox" role="switch" id="setupSmallTalk"><span class="switch-track" aria-hidden="true"></span><span class="switch-state" aria-hidden="true"></span></span>
+              <span>Include small talk</span>
+            </label>
+            <label class="toggle-row" for="setupCamera">
+              <span class="switch"><input type="checkbox" role="switch" id="setupCamera"><span class="switch-track" aria-hidden="true"></span><span class="switch-state" aria-hidden="true"></span></span>
+              <span>Show camera</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <p class="status error" id="setupStatus" role="status"></p>
+      </div>
+    </section>
+
+    <!-- ===== PRACTICE ===== -->
+    <section class="view" id="view-practice" hidden>
+      <div class="layout-3">
+        <div class="center-col stack">
+          <div class="page-head">
+            <h1 id="practiceTitle">Interview practice</h1>
+            <p class="counter" id="practiceCounter"></p>
+          </div>
+
+        <div class="flip" id="qFlip">
+          <div class="flip-inner">
+            <div class="flip-face flip-front">
+              <p class="eyebrow">Question</p>
+              <p class="q-text" id="qText"></p>
+            </div>
+            <div class="flip-face flip-back" aria-hidden="true">
+              <p class="eyebrow">Plain language</p>
+              <p class="q-text" id="qPlain"></p>
+              <p class="muted" id="qMeaning"></p>
+            </div>
+          </div>
+          <button class="hint-btn" aria-pressed="false">
+            <svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
+            <span class="hint-label">Hint</span>
+          </button>
+        </div>
+
+          <!-- Experience hint: one of the user's own experience cards that fits this question -->
+          <div class="exp-hint" id="expHint" hidden>
+            <button class="exp-close" id="expHintClose" aria-label="Close hint">×</button>
+            <p class="eyebrow">An experience you could use</p>
+            <div id="expHintBody"></div>
+          </div>
+
+          <div class="notice" id="noticeMic" hidden>
+            <p>The microphone isn't available. Type your answer, or check microphone access and try again.</p>
+          </div>
+
+          <!-- Camera preview and recording replay -->
+          <div class="camera-box" id="cameraBox">
+            <video id="video" playsinline muted></video>
+          </div>
+          <div id="audioReplay"></div>
+
+          <!-- Typed answer / editable transcript -->
+          <div id="answerArea">
+            <label class="field-label" for="answer" id="answerLabel">Your answer</label>
+            <textarea class="input answer-box" id="answer" rows="7"></textarea>
+          </div>
+
+          <!-- Answer controls: record, camera, type -->
+          <div class="controls" id="controls">
+            <button class="ctrl ctrl-rec" id="recBtn">
+              <span class="rec-dot"><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+              <span class="ctrl-label" id="recLabel">Record</span>
+            </button>
+            <button class="ctrl" id="cameraToggle" aria-pressed="false">
+              <span class="ctrl-icon"><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="7" width="13" height="10" rx="2"/><path d="m15 11 6-3v8l-6-3"/><path class="slash" d="M3 3l18 18"/></svg></span>
+              <span class="ctrl-label" id="cameraLabel">Camera off</span>
+            </button>
+            <button class="ctrl" id="expHintBtn" hidden>
+              <span class="ctrl-icon"><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12M7 11h6M7 15h4"/></svg></span>
+              <span class="ctrl-label">Experience hint</span>
+            </button>
+            <button class="ctrl" id="typeBtn" aria-pressed="false">
+              <span class="ctrl-icon"><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"/></svg></span>
+              <span class="ctrl-label">Type</span>
+            </button>
+          </div>
+          <p class="rec-status" id="recStatus" role="status"></p>
+
+
+          <!-- Submitted answer (while loading or after an error) -->
+          <div class="card" id="submittedCard" hidden>
+            <h3>Your answer</h3>
+            <p class="pre" id="submittedText"></p>
+          </div>
+          <div class="panel" id="loadingPanel" hidden>
+            <h3>Preparing your feedback…</h3>
+            <div class="spinner" aria-hidden="true"></div>
+          </div>
+          <div class="stack-tight" id="errorPanel" hidden>
+            <div class="panel">
+              <h3>Feedback could not load</h3>
+              <p>Your answer is still here.</p>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="retryFeedback">Try again</button>
+              <button class="btn" id="continueNoFeedback">Continue without feedback</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side-slot" id="practiceSide">
+          <!-- Practice companion (moved between Practice and Feedback by app.js) -->
+          <div class="companion" id="companion">
+            <div class="messages" id="chatLog" aria-live="polite"></div>
+            <div class="chips" id="chips"></div>
+            <form class="composer" id="chatForm">
+              <label class="sr-only" for="chatInput">Message the practice companion</label>
+              <input id="chatInput" placeholder="Ask a question…" autocomplete="off">
+              <button class="send-btn" type="submit" aria-label="Send">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            </form>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ===== FEEDBACK ===== -->
+    <section class="view" id="view-feedback" hidden>
+      <div class="layout-3">
+        <div class="center-col stack">
+          <div class="page-head">
+            <h1>Your feedback</h1>
+            <p class="counter" id="feedbackCounter"></p>
+          </div>
+
+        <div class="flip" id="fbFlip">
+          <div class="flip-inner">
+            <div class="flip-face flip-front">
+              <p class="eyebrow">Question</p>
+              <p class="q-text" id="fbText"></p>
+            </div>
+            <div class="flip-face flip-back" aria-hidden="true">
+              <p class="eyebrow">Plain language</p>
+              <p class="q-text" id="fbPlain"></p>
+              <p class="muted" id="fbMeaning"></p>
+            </div>
+          </div>
+          <button class="hint-btn" aria-pressed="false">
+            <svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
+            <span class="hint-label">Hint</span>
+          </button>
+        </div>
+
+          <div class="fb-answer">
+            <p class="field-label">Your answer</p>
+            <div class="answer-view pre annotated" id="fbAnswer"></div>
+          </div>
+          <div class="notes" id="fbHighlights"></div>
+        </div>
+        <aside class="side-slot" id="feedbackSide"></aside>
+      </div>
+    </section>
+
+    <!-- ===== SUMMARY ===== -->
+    <section class="view" id="view-summary" hidden>
+      <h1>Session complete</h1>
+
+      <div class="grid-main">
+        <div class="stack">
+          <div class="box box-good">
+            <h3>Strengths</h3>
+            <ul class="dash-list" id="sumStrengths"></ul>
+          </div>
+          <div class="box box-improve">
+            <h3>Areas to improve</h3>
+            <p id="sumNext"></p>
+          </div>
+          <div class="card">
+            <h3>Your answers</h3>
+            <ol class="answer-list" id="sumAnswers"></ol>
+          </div>
+        </div>
+
+        <div class="stack">
+          <button class="btn btn-primary" id="saveSession">Save session</button>
+          <p class="status" id="saveStatus" role="status"></p>
+          <div class="card">
+            <h3>Turn your answers into experience cards</h3>
+            <p>Cards are short notes about things you've done. They can give you hints next time you practice.</p>
+            <button class="btn" data-open="experience">Build experience cards</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== EXPERIENCE ===== -->
+    <section class="view" id="view-experience" hidden>
+      <div class="page-head">
+        <h1>Your experience cards</h1>
+        <button class="btn btn-primary" id="buildCards">Build cards from my resume and answers</button>
+      </div>
+      <p class="status" id="cardsStatus" role="status"></p>
+      <div class="cards-grid" id="cardsGrid"></div>
+    </section>
+
+    <!-- ===== PROGRESS ===== -->
+    <section class="view" id="view-progress" hidden>
+      <h1>Your saved practice</h1>
+      <p class="muted" id="progressEmpty" hidden>Save a practice session from the summary page to see your progress here.</p>
+      <div class="progress-grid" id="progressContent">
+        <div class="card chart-card">
+          <h3>Practice over time</h3>
+          <div id="chart"></div>
+        </div>
+        <div class="stack">
+          <div class="box box-good">
+            <h3>Strengths in your feedback</h3>
+            <ul id="progStrengths"></ul>
+          </div>
+          <div class="box box-improve">
+            <h3>Areas to improve</h3>
+            <ul id="progGrowth"></ul>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Most recent session</h3>
+          <p id="recentText"></p>
+          <div class="btn-row">
+            <button class="btn" id="viewSession">View session</button>
+            <button class="btn" id="compareSessions">Compare two sessions</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Choose a next focus</h3>
+          <div class="stack-tight" id="focusChoices"></div>
+          <button class="btn btn-primary" id="practiceFocus">Practice this</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== PREFERENCES ===== -->
+    <section class="view" id="view-preferences" hidden>
+      <div class="column">
+        <h1>Preferences</h1>
+
+        <fieldset class="panel">
+          <legend>How would you like to answer?</legend>
+          <div class="choices">
+            <label class="option option-icon"><input type="radio" name="prefInput" value="type"><span class="icons"><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"/></svg></span> Type</label>
+            <label class="option option-icon"><input type="radio" name="prefInput" value="speak"><span class="icons"><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="7" width="13" height="10" rx="2"/><path d="m15 11 6-3v8l-6-3"/></svg><svg class="opt-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span> Speak</label>
+          </div>
+        </fieldset>
+
+        <fieldset class="panel">
+          <legend>Session</legend>
+          <div class="row-2">
+            <label class="option"><input type="radio" name="prefCount" value="1"> 1 question</label>
+            <label class="option"><input type="radio" name="prefCount" value="3"> 3 questions</label>
+          </div>
+          <div class="stack-tight">
+            <label class="toggle-row" for="prefSmallTalk">
+              <span class="switch"><input type="checkbox" role="switch" id="prefSmallTalk"><span class="switch-track" aria-hidden="true"></span><span class="switch-state" aria-hidden="true"></span></span>
+              <span>Include small talk</span>
+            </label>
+            <label class="toggle-row" for="prefCamera">
+              <span class="switch"><input type="checkbox" role="switch" id="prefCamera"><span class="switch-track" aria-hidden="true"></span><span class="switch-state" aria-hidden="true"></span></span>
+              <span>Show camera</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <p class="status" id="prefsStatus" role="status"></p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== BACK / NEXT ARROWS (same place on every page) ===== -->
+  <nav class="arrows" aria-label="Page navigation">
+    <button class="arrow" id="backArrow">
+      <span class="arrow-icon" aria-hidden="true">←</span>
+      <span class="arrow-label" id="backLabel">Back</span>
+    </button>
+    <button class="arrow arrow-middle" id="middleArrow" hidden>
+      <span class="arrow-icon" aria-hidden="true">↺</span>
+      <span class="arrow-label" id="middleLabel"></span>
+    </button>
+    <button class="arrow arrow-next" id="nextArrow">
+      <span class="arrow-icon" aria-hidden="true">→</span>
+      <span class="arrow-label" id="nextLabel">Next</span>
+    </button>
+    <button class="link-btn admin-link" id="adminToggle">Admin</button>
+  </nav>
+
+  <!-- ===== LEAVE ===== -->
+  <dialog class="modal" id="leaveModal">
+    <h2>Leave this answer?</h2>
+    <p>Your answer hasn't been submitted.</p>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="keepEditing">Keep editing</button>
+      <button class="btn" id="discardLeave">Discard and leave</button>
     </div>
+  </dialog>
 
-    <!-- Step 2: shown after a successful login -->
-    <div id="adminEditor">
+  <!-- ===== EDIT AN EXPERIENCE CARD ===== -->
+  <dialog class="modal" id="cardModal">
+    <h2 id="cardModalTitle">Edit experience</h2>
+    <form class="stack-tight" id="cardForm" method="dialog">
+      <label class="field-label" for="cardTitle">Title</label>
+      <input class="input input-compact" id="cardTitle" required>
+      <label class="field-label" for="cardSituation">Situation: what was happening?</label>
+      <textarea class="input input-compact" id="cardSituation" rows="2"></textarea>
+      <label class="field-label" for="cardTask">Task: what needed to be done?</label>
+      <textarea class="input input-compact" id="cardTask" rows="2"></textarea>
+      <label class="field-label" for="cardAction">Action: what did you do?</label>
+      <textarea class="input input-compact" id="cardAction" rows="2"></textarea>
+      <label class="field-label" for="cardResult">Result: what changed?</label>
+      <textarea class="input input-compact" id="cardResult" rows="2"></textarea>
+      <label class="field-label" for="cardSkills">Skills (separate with commas)</label>
+      <input class="input input-compact" id="cardSkills">
+      <div class="btn-row">
+        <button class="btn btn-primary" id="cardSave" type="submit">Save</button>
+        <button class="btn" id="cardCancel" type="button">Cancel</button>
+        <button class="btn btn-danger" id="cardDelete" type="button">Delete card</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===== VIEW / COMPARE SAVED SESSIONS ===== -->
+  <dialog class="modal modal-wide" id="sessionModal">
+    <h2 id="sessionModalTitle"></h2>
+    <div class="compare-pick" id="comparePick" hidden>
+      <select class="input input-compact" id="compareA" aria-label="First session"></select>
+      <select class="input input-compact" id="compareB" aria-label="Second session"></select>
+    </div>
+    <div id="sessionModalBody"></div>
+    <div class="btn-row"><button class="btn" id="sessionModalClose">Close</button></div>
+  </dialog>
+
+  <!-- ===== ADMIN ===== -->
+  <dialog class="modal modal-wide" id="admin">
+    <h2>Admin</h2>
+    <div id="adminLogin" class="btn-row">
+      <input class="input" id="password" type="password" placeholder="Admin password">
+      <button class="btn btn-primary" id="loginBtn">Log in</button>
+    </div>
+    <div id="adminEditor" hidden>
       <h3>LLM prompt</h3>
-      <textarea id="adminPrompt"></textarea>
-      <br>
-      <button id="saveBtn">Save prompt</button>
-
+      <textarea class="input" id="adminPrompt" rows="8"></textarea>
+      <div class="btn-row"><button class="btn btn-primary" id="saveBtn">Save prompt</button></div>
       <h3>Recent answers sent to the LLM</h3>
-      <button id="loadSubsBtn">Load recent answers</button>
+      <button class="btn" id="loadSubsBtn">Load recent answers</button>
       <div id="submissions"></div>
     </div>
-
-    <div id="adminMessage" class="message"></div>
-  </div>
-
-  <!-- ===== MAIN PAGE ===== -->
-  <div class="layout">
-
-    <!-- Left column: question, recording, typed answer -->
-    <div class="panel">
-
-      <!-- Question shown to the user. To change it, edit QUESTION in app.js. -->
-      <h2>Question</h2>
-      <p id="questionText">What makes you qualified for this job?</p>
-
-      <!-- Recording section -->
-      <h2>Record your answer</h2>
-      <button id="startBtn">Start recording</button>
-      <button id="stopBtn" disabled>Stop recording</button>
-      <button id="submitRecBtn" disabled>Submit recording</button>
-
-      <!-- Shows the live camera while recording, then the recording to watch back -->
-      <video id="video" playsinline></video>
-
-      <!-- Typed answer section (an option for people who don't want to record) -->
-      <h2>Or type your answer</h2>
-      <textarea id="answer" placeholder="Type your answer here"></textarea>
-      <br>
-      <button id="submitTyped">Submit typed answer</button>
-
-    </div>
-
-    <!-- Right column: feedback from the backend -->
-    <div class="panel">
-      <h2>Feedback</h2>
-      <div id="feedback"></div>
-    </div>
-
-  </div>
+    <p class="status" id="adminMessage"></p>
+    <div class="btn-row"><button class="btn" id="adminClose">Close</button></div>
+  </dialog>
 
   <!-- Behavior lives in app.js -->
   <script src="app.js"></script>
