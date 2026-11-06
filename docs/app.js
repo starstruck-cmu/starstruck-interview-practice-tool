@@ -796,7 +796,7 @@ const SUGGESTIONS = {
   ],
   feedback: [
     { label: "Improved script", message: "Give me a script of an improved version of my answer." },
-    { label: "Ways to practice", message: "What are some actionable things I can do to practice applying this feedback in my next answers?" }
+    { label: "Ways to practice", message: "What are some actionable things I can do to practice applying the areas to improve feedback?" }
   ]
 };
 
@@ -850,6 +850,16 @@ function robotAvatar() {
   return avatar;
 }
 
+// All of the feedback as text, including each note shown under the answer.
+function feedbackSummary(fb) {
+  const notes = (fb.highlights || []).filter((h) => h && h.note).map((h) =>
+    `- ${h.type === "worked" ? "Did well" : "To improve"}${h.label ? " (" + h.label + ")" : ""}: ${h.note}` +
+    (h.quote ? ` [about: "${h.quote}"]` : ""));
+  return [`What worked: ${fb.what_worked || ""}`, `What to improve: ${fb.to_improve || ""}`]
+    .concat(notes.length ? ["Notes:"].concat(notes) : [])
+    .join("\n");
+}
+
 async function askCompanion(text) {
   text = text.trim();
   if (!text || !session) return;
@@ -868,7 +878,7 @@ async function askCompanion(text) {
       resume: resume ? resume.text : "",
       job_title: session.jobTitle,
       job_description: session.jobDescription,
-      feedback: fb ? `What worked: ${fb.what_worked} What to improve: ${fb.to_improve}` : "",
+      feedback: fb ? feedbackSummary(fb) : "",
       history: history
     });
     reply.text = plainText(data.reply);
