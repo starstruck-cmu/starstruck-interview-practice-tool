@@ -376,7 +376,7 @@ fieldset .stack-tight { margin: 0; }
 }
 .file-chip .link-btn { margin-left: auto; }
 .file-chip-wide { margin: 0 0 8px; }
-.file-icon { width: 22px; height: 30px; border: 1.5px solid var(--text); border-radius: 2px; }
+.file-icon { flex: none; width: 28px; height: 28px; fill: none; stroke: var(--teal); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
 .status { min-height: 1em; margin: 8px 0 0; font-size: 14px; color: var(--muted); }
 .status.error { color: #a1381c; }
@@ -403,18 +403,18 @@ fieldset .stack-tight { margin: 0; }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 4s; } }
 
 /* ---------- Feedback ---------- */
-.fb-answer { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* Feedback: the whole answer shows; the column scrolls to reach the notes */
+.fb-answer { flex: none; display: flex; flex-direction: column; }
 .fb-answer .field-label { margin-top: 0; }
 .answer-view {
-  min-height: 0;
-  overflow: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px 20px;
 }
 .annotated { margin: 0; line-height: 1.7; }
-.notes { flex: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; max-height: 40%; overflow: auto; }
+.notes { flex: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.center-col .flip { flex: none; }
 mark { border-radius: 3px; padding: 1px 2px; color: inherit; }
 mark.worked { background: var(--good-bg); box-shadow: inset 0 -2px var(--good-border); }
 mark.improve { background: var(--improve-bg); box-shadow: inset 0 -2px var(--improve-border); }
@@ -434,8 +434,8 @@ mark sup { font-weight: 600; font-size: 11px; margin-left: 2px; }
 .hl-note { display: block; }
 
 /* ---------- Summary ---------- */
-.dash-list { list-style: none; padding: 0; margin: 0; }
-.dash-list li::before { content: "— "; }
+.bullet-list { margin: 0; padding-left: 22px; }
+.bullet-list li { margin-bottom: 4px; }
 .answer-list { padding-left: 20px; margin: 0; max-height: 34vh; overflow: auto; }
 .answer-list li { margin-bottom: 12px; }
 
@@ -459,9 +459,10 @@ mark sup { font-weight: 600; font-size: 11px; margin-left: 2px; }
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(0, 660px) minmax(260px, 1fr);
   column-gap: 48px;
+  grid-template-rows: minmax(0, 1fr);   /* the row never grows past the window; long chats scroll inside */
   height: 100%;
 }
-.center-col { grid-column: 2; min-height: 0; gap: 12px; }
+.center-col { grid-column: 2; min-height: 0; gap: 12px; overflow-y: auto; padding: 2px; }
 .side-slot { grid-column: 3; justify-self: end; align-self: start; width: 100%; max-width: 310px; max-height: 100%; display: flex; margin-right: -24px; }
 
 /* Medium screens: content on the left, companion on the right */
@@ -544,7 +545,7 @@ mark sup { font-weight: 600; font-size: 11px; margin-left: 2px; }
 .companion {
   display: flex; flex-direction: column;
   width: 100%;
-  max-height: min(440px, 100%);
+  max-height: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -685,10 +686,8 @@ mark sup { font-weight: 600; font-size: 11px; margin-left: 2px; }
   background: var(--surface);
   border: 1px dashed var(--teal);
   border-radius: var(--radius);
-  padding: 8px 36px 8px 14px;
-  max-height: 112px;
-  overflow: auto;
-  font-size: 14px;
+  padding: 10px 36px 12px 16px;
+  font-size: 15px;
 }
 .exp-hint .eyebrow { margin-bottom: 2px; font-size: 12px; }
 .exp-hint h3 { font-size: 15px; margin-bottom: 2px; }
@@ -754,15 +753,33 @@ mark sup { font-weight: 600; font-size: 11px; margin-left: 2px; }
 .key::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
 .key.series-a::before { background: var(--teal); }
 .key.series-b::before { background: #8cc2a3; }
-.compare-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.session-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; }
+.session-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
+.session-list li:first-child { border-top: 0; }
 #sessionModalBody .answer-list { max-height: 50vh; }
 
 @media (max-width: 960px) {
-  .progress-grid, .compare-grid, .compare-pick { grid-template-columns: 1fr; }
+  .progress-grid { grid-template-columns: 1fr; }
   .side-slot { margin-right: 0; }
   .steps li { font-size: 12px; }
 }
 #focusChoices { margin: 4px 0 10px; }
 #focusChoices .option { padding: 6px 12px; }
 .progress-grid { gap: 12px; }
+
+/* ---------- Password page (testing) ---------- */
+body.gated .steps, body.gated #prefsButton { visibility: hidden; }
+body.gated .arrows { display: none; }
+#view-gate { display: flex; justify-content: center; align-items: flex-start; padding-top: 5vh; }
+.gate { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 16px; }
+.gate-note { background: var(--teal-tint); border-radius: var(--radius); padding: 14px 18px; }
+.gate-note p:last-child { margin-bottom: 0; }
+.gate-row { display: flex; gap: 10px; }
+
+/* Button with a spinner while it works */
+.btn-loading { display: inline-flex; align-items: center; gap: 8px; }
+.btn-spinner { display: none; width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, 0.5); border-top-color: #fff; border-radius: 50%; animation: spin 0.9s linear infinite; }
+.btn-loading.busy .btn-spinner { display: inline-block; }
+.btn-loading.busy:disabled { background: var(--teal); border-color: var(--teal); color: #fff; opacity: 0.85; }
+.btn-small { padding: 6px 16px; font-size: 14px; }
+#saveStatus { margin: 0; }

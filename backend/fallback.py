@@ -244,18 +244,38 @@ def short_title(text: str) -> str:
     return " ".join(words[:6]).capitalize() if words else "An experience"
 
 
-def experiences(resume: str, answers: list) -> list:
-    cards = []
+def words_of(card: dict) -> set:
+    text = " ".join(card.get(k, "") for k in ("title", "situation", "action", "result"))
+    return set(re.findall(r"[a-z]{4,}", text.lower()))
+
+
+def experiences(resume: str, answers: list, existing: list = ()) -> list:
+    """New cards, or updated existing ones (with "id"), from answers and resume lines."""
+    found = []
     for question, answer in answers:
         if len(answer.split()) >= 8:
-            cards.append(card_from_text(answer, short_title(answer)))
+            found.append(card_from_text(answer, short_title(answer)))
     # Resume lines that read like accomplishments (bullets or lines with an action word).
     for line in resume.splitlines():
         line = line.strip(" -*\t")
         if len(line.split()) >= 5 and re.search(r"\b(led|organiz|creat|built|managed|helped|coordinat|train|develop|plan)", line, re.IGNORECASE):
-            cards.append({"title": short_title(line), "situation": "", "task": "", "action": line,
+            found.append({"title": short_title(line), "situation": "", "task": "", "action": line,
                           "result": "", "skills": skills_in(line)})
-    return cards[:6]
+
+    out = []
+    for card in found:
+        # Same experience as an existing card if they share most of their words.
+        match = next((i for i, old in enumerate(existing)
+                      if len(words_of(card) & words_of(old)) >= max(3, len(words_of(card)) // 2)), None)
+        if match is None:
+            out.append(card)
+            continue
+        old = existing[match]
+        updated = {k: old.get(k) or card.get(k, "") for k in ("title", "situation", "task", "action", "result")}
+        updated["skills"] = old.get("skills") or card["skills"]
+        if any(updated[k] != old.get(k) for k in ("situation", "task", "action", "result")):
+            out.append(dict(updated, id=match))
+    return out[:8]
 
 
 def pick_experience(question: str, cards: list, used: list = ()) -> dict:

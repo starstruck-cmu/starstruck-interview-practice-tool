@@ -174,6 +174,8 @@ function show(view) {
 function arrowActions() {
   const stage = session && session.stage;
   switch (currentView) {
+    case "gate":
+      return { back: null, next: null };
     case "home":
       return {
         back: null,
@@ -608,7 +610,19 @@ function finishSession() {
   stopPreview();
   session.finished = true;
   nextFocus = "";
-  if (session.results.some((r) => r && r.answer)) save("starstruck.unlocked", true);
+  // Every session with at least one answer is saved automatically, in this browser.
+  if (session.results.some((r) => r && r.answer)) {
+    save("starstruck.unlocked", true);
+    const sessions = load("starstruck.sessions", []);
+    sessions.push({
+      date: new Date().toISOString(),
+      jobTitle: session.jobTitle,
+      general: !session.jobDescription,
+      results: session.results.filter(Boolean)
+    });
+    save("starstruck.sessions", sessions);
+    session.saved = true;
+  }
   go("summary");
 }
 
@@ -782,7 +796,7 @@ const SUGGESTIONS = {
   ],
   feedback: [
     { label: "Improved script", message: "Give me a script of an improved version of my answer." },
-    { label: "Ways to practice", message: "What are some actionable things I could do to practice these skills?" }
+    { label: "Ways to practice", message: "What are some actionable things I can do to practice applying this feedback in my next answers?" }
   ]
 };
 
@@ -817,6 +831,17 @@ function renderChat() {
   });
 }
 
+// Removes markdown symbols (**bold**, # headings, * bullets) so replies read as plain text.
+function plainText(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^\s*[*-]\s+/gm, "• ")
+    .replace(/\*/g, "")
+    .trim();
+}
+
 // The companion's profile picture: a small robot.
 function robotAvatar() {
   const avatar = el("span", "avatar");
@@ -846,7 +871,7 @@ async function askCompanion(text) {
       feedback: fb ? `What worked: ${fb.what_worked} What to improve: ${fb.to_improve}` : "",
       history: history
     });
-    reply.text = data.reply;
+    reply.text = plainText(data.reply);
   } catch (err) {
     reply.text = "Sorry, I couldn't answer just now. " + connectionMessage(err);
   }
@@ -931,8 +956,11 @@ function renderSummary() {
   (worked.length ? worked : ["You showed up and practiced."]).slice(0, 4)
     .forEach((s) => strengths.append(el("li", "", s)));
 
-  const lastImprove = withFeedback.map((r) => r.feedback.to_improve).filter(Boolean).pop();
-  $("sumNext").textContent = lastImprove || "Answer a question to get a focus for next time.";
+  const improve = $("sumNext");
+  improve.textContent = "";
+  const areas = [...new Set(withFeedback.map((r) => r.feedback.to_improve).filter(Boolean))];
+  (areas.length ? areas : ["Answer a question to get a focus for next time."]).slice(0, 4)
+    .forEach((s) => improve.append(el("li", "", s)));
 
   const answers = $("sumAnswers");
   answers.textContent = "";
@@ -944,22 +972,9 @@ function renderSummary() {
     answers.append(item);
   });
 
-  $("saveSession").hidden = session.saved || !results.length;
-  $("saveStatus").textContent = session.saved ? "Saved in this browser." : "";
+  $("saveStatus").textContent = session.saved ? "This session was saved automatically in this browser." : "";
+  $("saveStatus").hidden = !session.saved;
 }
-
-$("saveSession").addEventListener("click", () => {
-  const sessions = load("starstruck.sessions", []);
-  sessions.push({
-    date: new Date().toISOString(),
-    jobTitle: session.jobTitle,
-    general: !session.jobDescription,
-    results: session.results.filter(Boolean)
-  });
-  save("starstruck.sessions", sessions);
-  session.saved = true;
-  renderSummary();
-});
 
 
 /* =====================================================
@@ -1013,28 +1028,46 @@ function allAnswers() {
     .map((r) => ({ question: r.question.original, answer: r.answer }));
 }
 
+const BUILD_LABEL = "Build or update cards from resume and past question responses";
+
 $("buildCards").addEventListener("click", async () => {
   const button = $("buildCards");
   button.disabled = true;
-  $("cardsStatus").textContent = "Building cards from your resume and answers…";
+  button.classList.add("busy");
+  $("buildCardsLabel").textContent = "Building…";
+  $("cardsStatus").textContent = "Building cards from your resume and past answers…";
   try {
-    const data = await postJson("/api/experiences", { resume: resume ? resume.text : "", answers: allAnswers() });
-    // Keep existing cards and add new ones with a different title.
-    const titles = new Set(cards.map((c) => c.title.toLowerCase()));
-    const fresh = data.cards.filter((c) => {
-      const key = (c.title || "").toLowerCase();
-      if (!key || titles.has(key)) return false;
-      titles.add(key);
-      return true;
+    const data = await postJson("/api/experiences", {
+      resume: resume ? resume.text : "",
+      answers: allAnswers(),
+      existing: cards
     });
-    cards = cards.concat(fresh);
+    // Cards with an id update that card; the rest are new (skipped if the title already exists).
+    let updated = 0, added = 0;
+    const titles = new Set(cards.map((c) => c.title.toLowerCase()));
+    data.cards.forEach((c) => {
+      const card = { title: c.title || "", situation: c.situation || "", task: c.task || "",
+                     action: c.action || "", result: c.result || "", skills: c.skills || [] };
+      if (Number.isInteger(c.id) && cards[c.id]) {
+        cards[c.id] = { ...cards[c.id], ...card, title: card.title || cards[c.id].title };
+        updated += 1;
+      } else if (card.title && !titles.has(card.title.toLowerCase())) {
+        titles.add(card.title.toLowerCase());
+        cards.push(card);
+        added += 1;
+      }
+    });
     saveCards();
     renderExperience();
-    $("cardsStatus").textContent = fresh.length ? `Added ${fresh.length} card${fresh.length === 1 ? "" : "s"}.` : "No new experiences found.";
+    $("cardsStatus").textContent = added || updated
+      ? `Added ${added} and updated ${updated} card${added + updated === 1 ? "" : "s"}.`
+      : "Your cards are up to date.";
   } catch (err) {
     $("cardsStatus").textContent = connectionMessage(err);
   } finally {
     button.disabled = false;
+    button.classList.remove("busy");
+    $("buildCardsLabel").textContent = BUILD_LABEL;
   }
 });
 
@@ -1110,7 +1143,7 @@ function showHint(card, reason) {
   body.textContent = "";
   body.append(el("h3", "", card.title));
   if (reason) body.append(el("p", "muted", reason));
-  [["Situation", card.situation], ["Action", card.action], ["Result", card.result]]
+  [["Situation", card.situation], ["Task", card.task], ["Action", card.action], ["Result", card.result]]
     .filter(([, text]) => text)
     .forEach(([label, text]) => {
       const line = el("p", "note-line");
@@ -1147,7 +1180,7 @@ function topTags(sessions, key, limit) {
 }
 
 function sessionName(saved, i) {
-  const date = new Date(saved.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const date = new Date(saved.date).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   return `Session ${i + 1} · ${date}` + (saved.jobTitle ? ` · ${saved.jobTitle}` : "");
 }
 
@@ -1169,11 +1202,18 @@ function renderProgress() {
   const growth = topTags(sessions.slice(-1), "growth_tags", 3);
   fill("progGrowth", growth, "No areas to improve found yet.");
 
-  const last = sessions[sessions.length - 1];
-  const answered = (last.results || []).filter((r) => r.answer).length;
-  $("recentText").textContent = `${sessionName(last, sessions.length - 1)}: ${answered} answer${answered === 1 ? "" : "s"}` +
-    (last.general ? ", general questions." : ".");
-  $("compareSessions").disabled = sessions.length < 2;
+  // All sessions, newest first, each with a View button.
+  const list = $("sessionList");
+  list.textContent = "";
+  sessions.map((saved, i) => [saved, i]).reverse().forEach(([saved, i]) => {
+    const answered = (saved.results || []).filter((r) => r.answer).length;
+    const item = el("li");
+    item.append(el("span", "", `${sessionName(saved, i)} · ${answered} answer${answered === 1 ? "" : "s"}`));
+    const view = el("button", "btn btn-small", "View");
+    view.addEventListener("click", () => showSessionModal(sessionName(saved, i), sessionDetails(saved)));
+    item.append(view);
+    list.append(item);
+  });
 
   const choices = $("focusChoices");
   choices.textContent = "";
@@ -1246,47 +1286,6 @@ function sessionDetails(saved) {
   });
   return list;
 }
-
-$("viewSession").addEventListener("click", () => {
-  const sessions = load("starstruck.sessions", []);
-  const last = sessions[sessions.length - 1];
-  $("comparePick").hidden = true;
-  showSessionModal(sessionName(last, sessions.length - 1), sessionDetails(last));
-});
-
-$("compareSessions").addEventListener("click", () => {
-  const sessions = load("starstruck.sessions", []);
-  ["compareA", "compareB"].forEach((id, k) => {
-    const select = $(id);
-    select.textContent = "";
-    sessions.forEach((s, i) => select.append(new Option(sessionName(s, i), i)));
-    select.value = String(k === 0 ? sessions.length - 2 : sessions.length - 1);
-  });
-  $("comparePick").hidden = false;
-  showSessionModal("Compare two sessions", renderComparison());
-});
-
-function renderComparison() {
-  const sessions = load("starstruck.sessions", []);
-  const grid = el("div", "compare-grid");
-  ["compareA", "compareB"].forEach((id) => {
-    const i = Number($(id).value);
-    const s = sessions[i];
-    const scores = sessionScores(s);
-    const col = el("div", "card");
-    col.append(el("h3", "", sessionName(s, i)));
-    col.append(el("p", "", scores ? `Clarity ${scores.clarity}% · Structure ${scores.structure}%` : "No scores"));
-    col.append(el("p", "muted", "Strengths: " + (topTags([s], "strength_tags", 3).join(", ") || "none yet")));
-    col.append(el("p", "muted", "To improve: " + (topTags([s], "growth_tags", 3).join(", ") || "none")));
-    grid.append(col);
-  });
-  return grid;
-}
-
-["compareA", "compareB"].forEach((id) => $(id).addEventListener("change", () => {
-  $("sessionModalBody").textContent = "";
-  $("sessionModalBody").append(renderComparison());
-}));
 
 $("sessionModalClose").addEventListener("click", () => $("sessionModal").close());
 
@@ -1436,5 +1435,26 @@ $("loadSubsBtn").addEventListener("click", async () => {
    START
    ===================================================== */
 
-renderHome();
-show("home");
+// Testing password. This only keeps casual visitors out: anyone can read it in this file.
+const TEST_PASSWORD = "cmu2026";
+
+$("gateForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if ($("gatePassword").value.trim() !== TEST_PASSWORD) {
+    $("gateStatus").textContent = "That password isn't right. Please try again.";
+    return;
+  }
+  save("starstruck.access", true);
+  document.body.classList.remove("gated");
+  renderHome();
+  show("home");
+});
+
+if (load("starstruck.access", false)) {
+  renderHome();
+  show("home");
+} else {
+  document.body.classList.add("gated");
+  show("gate");
+  $("gatePassword").focus();
+}

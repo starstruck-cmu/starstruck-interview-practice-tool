@@ -124,11 +124,6 @@ class QA(BaseModel):
     answer: str
 
 
-class ExperiencesRequest(BaseModel):
-    resume: str = ""
-    answers: list[QA] = []
-
-
 class Card(BaseModel):
     title: str
     situation: str = ""
@@ -136,6 +131,12 @@ class Card(BaseModel):
     action: str = ""
     result: str = ""
     skills: list[str] = []
+
+
+class ExperiencesRequest(BaseModel):
+    resume: str = ""
+    answers: list[QA] = []
+    existing: list[Card] = []   # the user's current cards, so they get updated instead of copied
 
 
 class PickRequest(BaseModel):
@@ -296,8 +297,10 @@ async def companion(req: CompanionRequest):
         "You are a calm practice companion for an autistic or ADHD job seeker preparing an interview answer. "
         "Help them recall their own experiences, name skills, or structure their answer with STAR "
         "(Situation, Task, Action, Result). If they haven't received feedback yet, do not write the answer for them. "
+        "If they ask how to practice, give concrete exercises for applying the specific feedback they received. "
         "If they have feedback and ask for an improved version or script, rewrite their answer using only their own experiences. "
-        "Use short, plain sentences and at most 120 words. Use a short list when it helps.\n\n"
+        "Use short, plain sentences and at most 150 words. Write plain text only: no markdown, "
+        "no asterisks or pound signs. For a list, start each line with \"• \".\n\n"
         f"{job_context(req.job_title, req.job_description)}\n"
         f"Resume: {req.resume or 'not given'}\n"
         f"Interview question: {req.question}\n"
@@ -309,25 +312,36 @@ async def companion(req: CompanionRequest):
     return {"reply": reply.strip()}
 
 
-# Turns the resume and past answers into short STAR experience cards.
+# Builds or updates short STAR experience cards from the resume and past answers.
+# Cards that update an existing one come back with that card's "id" (its position in the list).
 @app.post("/api/experiences")
 async def experiences(req: ExperiencesRequest):
-    answers = [a for a in req.answers if a.answer.strip()][-10:]
+    answers = [a for a in req.answers if a.answer.strip()][-15:]
+    existing = [c.model_dump() for c in req.existing]
     if not AI_ENABLED:
-        return {"cards": fallback.experiences(req.resume, [(a.question, a.answer) for a in answers])}
+        return {"cards": fallback.experiences(req.resume, [(a.question, a.answer) for a in answers], existing)}
     answer_text = "\n".join(f"Q: {a.question}\nA: {a.answer}" for a in answers) or "none"
+    existing_text = "\n".join(
+        f"id {i}: {c['title']} | S: {c['situation']} | T: {c['task']} | A: {c['action']} | R: {c['result']}"
+        for i, c in enumerate(existing)
+    ) or "none"
     prompt = (
-        "You help an autistic or ADHD job seeker collect real experiences they can use in interviews.\n"
+        "You help an autistic or ADHD job seeker keep a set of real experiences they can use in interviews.\n"
         f"Resume: {req.resume or 'not given'}\n"
-        f"Their practice answers:\n{answer_text}\n\n"
-        "Find up to 6 distinct, specific experiences from this material. Only use what they actually wrote; "
-        "do not invent details. For each, write short plain sentences for STAR (leave a part empty if unknown) "
-        "and 2-3 skills it shows.\n"
-        'Return only JSON: {"cards": [{"title": "3-6 words", "situation": "...", "task": "...", '
-        '"action": "...", "result": "...", "skills": ["..."]}]}'
+        f"Their past practice answers:\n{answer_text}\n\n"
+        f"Their existing experience cards:\n{existing_text}\n\n"
+        "Rules:\n"
+        "- Every practice answer that describes a real experience must be covered by a card.\n"
+        "- If an experience is already on an existing card, do not make a new card. Instead return that card "
+        "with its id, filling in or improving parts using new details from the answers.\n"
+        "- Add new cards (without an id) only for experiences not covered yet, from the answers or the resume.\n"
+        "- Only use what they actually wrote; do not invent details. Leave a STAR part empty if unknown.\n"
+        "- Return only cards that are new or changed. At most 8 new cards.\n"
+        'Return only JSON: {"cards": [{"id": 0 (only for existing cards), "title": "3-6 words", '
+        '"situation": "...", "task": "...", "action": "...", "result": "...", "skills": ["2-3 skills"]}]}'
     )
     data = await call_gemini([{"text": prompt}], as_json=True)
-    return {"cards": data.get("cards", [])[:6]}
+    return {"cards": data.get("cards", [])}
 
 
 # Picks the experience card that best fits an interview question.

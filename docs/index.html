@@ -48,7 +48,27 @@
   <main>
 
     <!-- ===== HOME ===== -->
-    <section class="view" id="view-home">
+    <!-- ===== PASSWORD PAGE (testing only) ===== -->
+    <section class="view" id="view-gate" hidden>
+      <div class="gate card">
+        <h1>Welcome to STARstruck</h1>
+        <div class="gate-note">
+          <p><strong>Thanks for testing!</strong> This is a testing environment.</p>
+          <p>Everything you add (your resume, answers, experience cards and saved sessions) is saved on your own computer, in this browser.</p>
+          <p>When you ask for feedback with the chat interview bot, your answers are sent to Google's Gemini AI, so please don't include private details like your address or phone number.</p>
+        </div>
+        <form id="gateForm">
+          <label class="field-label" for="gatePassword">Password</label>
+          <div class="gate-row">
+            <input class="input input-compact" id="gatePassword" type="password" autocomplete="off">
+            <button class="btn btn-primary" type="submit">Enter</button>
+          </div>
+          <p class="status error" id="gateStatus" role="status"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="view" id="view-home" hidden>
       <h1 class="hero">Build confidence through practice.</h1>
 
       <div class="card card-dashed narrow">
@@ -65,7 +85,10 @@
         </label>
 
         <div class="file-chip" id="resumeChip" hidden>
-          <span class="file-icon" aria-hidden="true"></span>
+          <svg class="file-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+            <path d="M14 3v5h5M9 13h6M9 17h6M9 9h2" />
+          </svg>
           <span id="resumeName"></span>
           <button class="link-btn" id="removeResume">Remove</button>
         </div>
@@ -298,11 +321,11 @@
         <div class="stack">
           <div class="box box-good">
             <h3>Strengths</h3>
-            <ul class="dash-list" id="sumStrengths"></ul>
+            <ul class="bullet-list" id="sumStrengths"></ul>
           </div>
           <div class="box box-improve">
             <h3>Areas to improve</h3>
-            <p id="sumNext"></p>
+            <ul class="bullet-list" id="sumNext"></ul>
           </div>
           <div class="card">
             <h3>Your answers</h3>
@@ -311,8 +334,7 @@
         </div>
 
         <div class="stack">
-          <button class="btn btn-primary" id="saveSession">Save session</button>
-          <p class="status" id="saveStatus" role="status"></p>
+          <p class="status" id="saveStatus" role="status" hidden></p>
           <div class="card">
             <h3>Turn your answers into experience cards</h3>
             <p>Cards are short notes about things you've done. They can give you hints next time you practice.</p>
@@ -326,7 +348,10 @@
     <section class="view" id="view-experience" hidden>
       <div class="page-head">
         <h1>Your experience cards</h1>
-        <button class="btn btn-primary" id="buildCards">Build cards from my resume and answers</button>
+        <button class="btn btn-primary btn-loading" id="buildCards">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span id="buildCardsLabel">Build or update cards from resume and past question responses</span>
+        </button>
       </div>
       <p class="status" id="cardsStatus" role="status"></p>
       <div class="cards-grid" id="cardsGrid"></div>
@@ -352,12 +377,8 @@
           </div>
         </div>
         <div class="card">
-          <h3>Most recent session</h3>
-          <p id="recentText"></p>
-          <div class="btn-row">
-            <button class="btn" id="viewSession">View session</button>
-            <button class="btn" id="compareSessions">Compare two sessions</button>
-          </div>
+          <h3>All sessions</h3>
+          <ul class="session-list" id="sessionList"></ul>
         </div>
         <div class="card">
           <h3>Choose a next focus</h3>
@@ -455,13 +476,9 @@
     </form>
   </dialog>
 
-  <!-- ===== VIEW / COMPARE SAVED SESSIONS ===== -->
+  <!-- ===== VIEW A SAVED SESSION ===== -->
   <dialog class="modal modal-wide" id="sessionModal">
     <h2 id="sessionModalTitle"></h2>
-    <div class="compare-pick" id="comparePick" hidden>
-      <select class="input input-compact" id="compareA" aria-label="First session"></select>
-      <select class="input input-compact" id="compareB" aria-label="Second session"></select>
-    </div>
     <div id="sessionModalBody"></div>
     <div class="btn-row"><button class="btn" id="sessionModalClose">Close</button></div>
   </dialog>
