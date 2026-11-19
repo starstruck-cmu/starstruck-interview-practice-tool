@@ -49,7 +49,7 @@ let lastView = "home";                             // where Preferences goes bac
 let preparing = false;                             // true while questions are being written
 let cards = load("starstruck.stories", []);       // experience cards: { title, situation, task, action, result, skills }
 let nextFocus = "";                                // an area to practice, sent to the AI when writing questions
-let nextFocusLabel = "";                           // the short name for it shown on Set up
+let focusInfo = null;                              // what Set up shows: { kind: "experience", card } or { kind: "skills", job, areas }
 let coachMinimized = load("starstruck.coachMin", false);   // coach tucked into a tab on the right
 
 
@@ -192,7 +192,7 @@ function arrowActions() {
       };
     case "practice":
       return {
-        back: { label: "Leave", run: leavePractice },
+        back: { label: "Home", run: leavePractice },
         next: {
           // An empty answer skips the question.
           label: $("answer").value.trim() ? "Submit" : "Skip",
@@ -202,7 +202,7 @@ function arrowActions() {
       };
     case "feedback":
       return {
-        back: { label: "Leave", run: leavePractice },
+        back: { label: "Home", run: leavePractice },
         middle: { label: "Retry question", run: retryQuestion },
         next: { label: isLastQuestion() ? "Finish" : "Next question", run: nextQuestion }
       };
@@ -408,9 +408,47 @@ function renderSetup() {
   $("setupTour").checked = newUser;
   $("tourRec").hidden = !newUser;
   $("setupStatus").textContent = "";
-  $("focusNote").hidden = !nextFocus;
-  $("focusNote").textContent = nextFocus ? "Focus: " + (nextFocusLabel || nextFocus) : "";
+  renderFocusBox();
   updateSetup();
+}
+
+// The box at the top of Set up saying what this session focuses on.
+function renderFocusBox() {
+  const box = $("focusBox");
+  box.textContent = "";
+  box.hidden = !focusInfo;
+  if (!focusInfo) return;
+
+  const head = el("div", "focus-head");
+  head.append(el("p", "eyebrow", focusInfo.kind === "experience" ? "Practicing this experience" : "Practicing these skills"));
+  const clear = el("button", "link-btn", "Clear");
+  clear.setAttribute("aria-label", "Clear the focus and practice without one");
+  clear.addEventListener("click", () => { nextFocus = ""; focusInfo = null; renderFocusBox(); });
+  head.append(clear);
+  box.append(head);
+
+  if (focusInfo.kind === "experience") {
+    const card = focusInfo.card;
+    box.append(el("h3", "", card.title));
+    const star = el("dl", "note-star");
+    [["Situation", card.situation], ["Task", card.task], ["Action", card.action], ["Result", card.result]]
+      .forEach(([label, text]) => {
+        star.append(el("dt", "", label));
+        star.append(el("dd", text ? "" : "missing", text || "…"));
+      });
+    box.append(star);
+    if ((card.skills || []).length) {
+      const tags = el("div", "tags");
+      card.skills.forEach((skill) => tags.append(el("span", "tag", skill)));
+      box.append(tags);
+    }
+    return;
+  }
+
+  if (focusInfo.job) box.append(el("h3", "", "For " + focusInfo.job));
+  const list = el("ul", "check-list");
+  focusInfo.areas.forEach((area) => list.append(el("li", "", area)));
+  box.append(list);
 }
 
 function updateSetup() {
@@ -494,24 +532,29 @@ function startSession(questions, jobTitle, jobDescription) {
     finished: false,
     saved: false,
     hints: {},   // question index -> experience card suggested for it
+    // Practicing one experience: its card is shown as the hint on every question.
+    focusCard: focusInfo && focusInfo.kind === "experience" ? titleKey(focusInfo.card.title) : null,
     startedAt: Date.now()
   };
   startQuestion("");
 }
 
 // keepChat: retrying a question keeps its companion conversation.
-function startQuestion(draft, keepChat) {
+// script: an improved answer to read out loud (typing is turned off).
+function startQuestion(draft, keepChat, script) {
+  session.script = script || null;
   session.stage = draft ? "review" : "answer";
   if (!keepChat) session.chat = [];
   $("answer").value = draft;
   $("answer").placeholder = "";
   $("recStatus").textContent = "";
-  $("expHint").hidden = true;
+  setHintOpen(false);
   clearReplay();
   setFlip("q", currentQuestion());
   show("practice");
   renderPractice();
   renderChat();
+  showFocusCardHint();
   if (session.mode === "speak" && session.camera) startPreview();
 }
 
@@ -531,6 +574,33 @@ function hasUnsentAnswer() {
 
 const HINT_LABEL = "Hint: see it in plain language";
 
+// Shrinks the plain-language text until it fits in the card, so the card never grows.
+function fitPlainSide(card) {
+  const back = card.querySelector(".flip-back");
+  const plain = back.querySelector(".q-text");
+  const meaning = back.querySelector(".muted");
+  let size = 22;
+  plain.style.fontSize = size + "px";
+  meaning.style.fontSize = "";
+  meaning.hidden = false;
+  const tooBig = () => back.scrollHeight > back.clientHeight + 1;
+  while (tooBig() && size > 14) {
+    size -= 1;
+    plain.style.fontSize = size + "px";
+    meaning.style.fontSize = Math.max(12, Math.round(size * 0.7)) + "px";
+  }
+  // Still too long: drop the "what the interviewer wants" line and let the question grow back.
+  if (tooBig()) {
+    meaning.hidden = true;
+    while (!tooBig() && size < 22) plain.style.fontSize = ++size + "px";
+    if (tooBig()) plain.style.fontSize = --size + "px";
+  }
+}
+
+window.addEventListener("resize", () => {
+  document.querySelectorAll(".flip.flipped").forEach(fitPlainSide);
+});
+
 // Fills a question card. The hint button flips it to the plain-language side.
 function setFlip(prefix, q) {
   const card = $(prefix + "Flip");
@@ -548,6 +618,7 @@ document.querySelectorAll(".hint-btn").forEach((button) => {
   button.addEventListener("click", () => {
     const card = button.closest(".flip");
     const flipped = card.classList.toggle("flipped");
+    if (flipped) fitPlainSide(card);
     button.setAttribute("aria-pressed", String(flipped));
     button.querySelector(".hint-label").textContent = flipped ? "Back to the original question" : HINT_LABEL;
     card.querySelector(".flip-back").setAttribute("aria-hidden", String(!flipped));
@@ -583,7 +654,10 @@ function renderPractice() {
   $("cameraToggle").disabled = busy;
   $("cameraToggle").setAttribute("aria-pressed", String(session.camera));
   $("cameraLabel").textContent = session.camera ? "Camera on" : "Camera off";
-  $("typeBtn").disabled = busy;
+  $("typeBtn").disabled = busy || Boolean(session.script);
+  $("typeBtn").title = session.script ? "Typing is off while you practice saying the script out loud" : "";
+  $("scriptPanel").hidden = !session.script || waiting;
+  renderScript($("scriptText"), session.script || "");
   $("expHintBtn").hidden = !cards.length;
   $("typeBtn").setAttribute("aria-pressed", String(!speaking));
   $("recStatus").hidden = waiting;
@@ -613,7 +687,15 @@ $("recBtn").addEventListener("click", () => {
   }
 });
 
+// Type switches to typing; pressing it again goes back to speaking.
 $("typeBtn").addEventListener("click", () => {
+  if (session.mode === "type") {
+    session.mode = "speak";
+    session.stage = $("answer").value.trim() ? "review" : "answer";
+    renderPractice();
+    if (session.camera) startPreview();
+    return;
+  }
   session.mode = "type";
   stopPreview();
   if (session.stage !== "review") session.stage = "answer";
@@ -626,7 +708,7 @@ $("retryFeedback").addEventListener("click", submitAnswer);
 async function submitAnswer() {
   const answer = $("answer").value.trim();
   if (!answer) {
-    session.results[session.index] = { question: currentQuestion(), answer: "", skipped: true };
+    saveResult({ question: currentQuestion(), answer: "", skipped: true });
     nextQuestion();
     return;
   }
@@ -646,7 +728,7 @@ async function submitAnswer() {
       job_description: session.jobDescription
     });
     if (mySession !== session || session.finished) return;   // left while waiting
-    session.results[session.index] = { question: q, answer: answer, feedback: feedback };
+    saveResult({ question: q, answer: answer, feedback: feedback, mode: session.mode });
     renderFeedback();
     show("feedback");
     renderChat();
@@ -658,7 +740,7 @@ async function submitAnswer() {
 }
 
 $("continueNoFeedback").addEventListener("click", () => {
-  session.results[session.index] = { question: currentQuestion(), answer: $("answer").value.trim(), feedback: null };
+  saveResult({ question: currentQuestion(), answer: $("answer").value.trim(), feedback: null, mode: session.mode });
   nextQuestion();
 });
 
@@ -672,12 +754,59 @@ function nextQuestion() {
   startQuestion("");
 }
 
+// Shows an improved script. Parts wrapped in {{ }} (added or changed by the AI) are underlined.
+function renderScript(box, text) {
+  box.textContent = "";
+  text.split(/(\{\{.*?\}\})/s).forEach((part) => {
+    if (part.startsWith("{{") && part.endsWith("}}")) {
+      const mark = el("span", "changed", part.slice(2, -2));
+      mark.title = "Added or changed";
+      box.append(mark);
+    } else if (part) {
+      box.append(part.replace(/\{\{|\}\}/g, ""));
+    }
+  });
+}
+
+// Feedback page: go back to this question and say the improved script out loud.
+// Earlier tries at a question are kept, so the results can show the first and second try.
+function keepTry() {
+  const current = session.results[session.index];
+  if (!current) return;
+  session.attempts = session.attempts || {};
+  session.attempts[session.index] = (current.earlier || []).concat({
+    answer: current.answer, mode: current.mode, feedback: current.feedback
+  });
+  session.results[session.index] = undefined;
+}
+
+function saveResult(result) {
+  const earlier = (session.attempts || {})[session.index];
+  if (earlier && earlier.length) result.earlier = earlier;
+  session.results[session.index] = result;
+}
+
+$("readAloudBtn").addEventListener("click", () => {
+  const result = session.results[session.index];
+  const script = result.feedback.improved_answer;
+  // No hint used yet: show the experience card this answer is about, so it matches the script.
+  if (!session.hints[session.index]) {
+    const match = cardForAnswer(result.answer);
+    if (match !== -1) session.hints[session.index] = { card: match, reason: "The experience your answer is about." };
+  }
+  keepTry();
+  session.mode = "speak";
+  startQuestion("", true, script);
+  reopenHint();
+});
+
 // Feedback page: answer the same question again, starting from the last answer.
 function retryQuestion() {
   const draft = session.results[session.index].answer;
-  session.results[session.index] = undefined;
+  keepTry();
   session.mode = "type";
   startQuestion(draft, true);
+  reopenHint();
 }
 
 function finishSession() {
@@ -685,6 +814,7 @@ function finishSession() {
   stopPreview();
   session.finished = true;
   nextFocus = "";
+  focusInfo = null;
   // Every session with at least one answer is saved automatically, in this browser.
   if (session.results.some((r) => r && r.answer)) {
     save("starstruck.unlocked", true);
@@ -734,6 +864,7 @@ function stopPreview() {
 }
 
 function showLive(stream) {
+  video.classList.add("mirrored");   // the live camera works like a mirror
   video.removeAttribute("src");
   video.srcObject = stream;
   video.muted = true;
@@ -817,6 +948,7 @@ function stopRecording(cancel) {
 function showReplay(blob, isVideo) {
   replayUrl = URL.createObjectURL(blob);
   if (isVideo) {
+    video.classList.remove("mirrored");   // replays show the recording as it was filmed (and keep the controls readable)
     video.srcObject = null;
     video.src = replayUrl;
     video.muted = false;
@@ -1003,6 +1135,9 @@ function renderFeedback() {
 
   $("feedbackCounter").textContent = `Question ${session.index + 1} of ${session.questions.length}`;
   setFlip("fb", result.question);
+  $("fbScriptCard").hidden = !fb.improved_answer;
+  renderScript($("fbScript"), fb.improved_answer || "");
+  $("readAloudNote").hidden = !(fb.improved_answer && result.mode === "type");
   // Notes sit next to the answer. If there are none, show the one thing to improve.
   let highlights = (fb.highlights || []).filter((h) => h && h.note);
   if (!highlights.length && fb.to_improve) highlights = [{ type: "improve", label: "To improve", note: fb.to_improve }];
@@ -1074,8 +1209,8 @@ function renderSummary() {
   session.questions.forEach((q, i) => {
     const r = session.results[i];
     const item = el("li");
-    item.append(el("strong", "", q.original), el("br"));
-    item.append(el("span", "muted", r && r.answer ? r.answer : "Skipped"));
+    item.append(el("strong", "", q.original));
+    appendTries(item, r);
     answers.append(item);
   });
 
@@ -1098,7 +1233,7 @@ function saveCards() {
   save("starstruck.stories", cards);
 }
 
-const SOURCE_LABEL = { practice: "From practice", resume: "From resume" };
+const SOURCE_LABEL = { practice: "From practice", resume: "From resume", manual: "Added by you" };
 
 // A question for the most important missing STAR part, or "" when the story is complete.
 function cardQuestion(card) {
@@ -1129,15 +1264,22 @@ function renderExperience() {
     const head = el("div", "note-head");
     head.append(el("h3", "", card.title));
     if (change) head.append(el("span", "change-tag", change === "new" ? "New" : "Updated"));
-    head.append(el("span", "source-tag", SOURCE_LABEL[card.source] || "Added by you"));
+    if (SOURCE_LABEL[card.source]) head.append(el("span", "source-tag", SOURCE_LABEL[card.source]));
     note.append(head);
 
-    // A short summary of the STAR parts the card has.
-    const summary = [["Situation", card.situation], ["Task", card.task], ["Action", card.action], ["Result", card.result]]
-      .filter(([, text]) => text)
-      .map(([label, text]) => `${label}: ${text}`)
-      .join(" ");
-    if (summary) note.append(el("p", "note-summary", summary));
+    // Each STAR part on its own line, then the skills.
+    const star = el("dl", "note-star");
+    [["Situation", card.situation], ["Task", card.task], ["Action", card.action], ["Result", card.result]]
+      .forEach(([label, text]) => {
+        star.append(el("dt", "", label));
+        star.append(el("dd", text ? "" : "missing", text || "…"));
+      });
+    note.append(star);
+    if ((card.skills || []).length) {
+      const tags = el("div", "tags");
+      card.skills.forEach((skill) => tags.append(el("span", "tag", skill)));
+      note.append(tags);
+    }
 
     const question = cardQuestion(card);
     if (question) note.append(el("p", "note-question", "Expand: " + question));
@@ -1166,7 +1308,7 @@ $("addCard").addEventListener("click", () => openCard(-1));
 // Starts a session whose questions fit this experience.
 function practiceCard(card) {
   nextFocus = `my experience "${card.title}"` + (card.action ? ` (${card.action})` : "");
-  nextFocusLabel = card.title;
+  focusInfo = { kind: "experience", card: card };
   session = null;
   go("setup");
 }
@@ -1185,6 +1327,11 @@ function allAnswers(since) {
 function newAnswers() {
   const since = load("starstruck.cardsUpdatedAt", null);
   return since ? allAnswers(since) : [];
+}
+
+// "Large-Scale Hackathon" and "large scale hackathon" count as the same title.
+function titleKey(title) {
+  return (title || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 // Build: uses the resume and all past answers. Update: only answers from new practice.
@@ -1210,7 +1357,7 @@ async function runCards(mode) {
     });
     // Cards with an id update that card; the rest are new (skipped if the title already exists).
     let updated = 0, added = 0;
-    const titles = new Set(cards.map((c) => c.title.toLowerCase()));
+    const titles = new Set(cards.map((c) => titleKey(c.title)));
     data.cards.forEach((c) => {
       const card = { title: c.title || "", situation: c.situation || "", task: c.task || "",
                      action: c.action || "", result: c.result || "", skills: c.skills || [],
@@ -1219,8 +1366,8 @@ async function runCards(mode) {
         cards[c.id] = { ...cards[c.id], ...card, title: card.title || cards[c.id].title };
         cardsChanged[c.id] = "updated";
         updated += 1;
-      } else if (card.title && !titles.has(card.title.toLowerCase())) {
-        titles.add(card.title.toLowerCase());
+      } else if (card.title && !titles.has(titleKey(card.title))) {
+        titles.add(titleKey(card.title));
         cards.push(card);
         cardsChanged[cards.length - 1] = "new";
         added += 1;
@@ -1277,7 +1424,7 @@ $("cardForm").addEventListener("submit", () => {
     result: $("cardResult").value.trim(),
     skills: $("cardSkills").value.split(",").map((t) => t.trim()).filter(Boolean)
   };
-  if (editingCard === -1) cards.push(card);
+  if (editingCard === -1) cards.push({ ...card, source: "manual" });
   else cards[editingCard] = { ...cards[editingCard], ...card };   // keeps where the card came from
   saveCards();
   renderExperience();
@@ -1294,34 +1441,102 @@ $("cardDelete").addEventListener("click", () => {
 
 // Practice page: the AI picks the card that best fits the current question,
 // preferring cards not already suggested for other questions this session.
-$("expHintBtn").addEventListener("click", async () => {
-  const body = $("expHintBody");
-  $("expHint").hidden = false;
-  const index = session.index;
-  const known = session.hints[index];
-  if (known && cards[known.card]) {
-    showHint(cards[known.card], known.reason);
+// The Experience hint button is highlighted while the hint is open.
+function setHintOpen(open) {
+  $("expHint").hidden = !open;
+  if (!open) $("expHint").style.minHeight = "";   // a fresh size next time it opens
+  $("expHintBtn").setAttribute("aria-pressed", String(open));
+}
+
+// When practicing one experience, its card opens as the hint right away.
+function showFocusCardHint() {
+  if (!session.focusCard) return;
+  const index = cards.findIndex((c) => titleKey(c.title) === session.focusCard);
+  if (index === -1) return;
+  session.hints[session.index] = { card: index, reason: "", chosen: true };
+  setHintOpen(true);
+  showHint(cards[index], "", true);
+}
+
+// Retrying a question: open the same experience hint it had before.
+function reopenHint() {
+  const known = session.hints[session.index];
+  if (!known || !cards[known.card]) return;
+  setHintOpen(true);
+  showHint(cards[known.card], known.reason, known.chosen);
+}
+
+// The experience card that shares the most words with an answer, or -1 if none clearly does.
+function cardForAnswer(answer) {
+  const words = (text) => new Set((text || "").toLowerCase().match(/[a-z]{4,}/g) || []);
+  const said = words(answer);
+  let best = -1, bestScore = 2;   // needs at least 3 shared words
+  cards.forEach((card, i) => {
+    const own = words([card.title, card.situation, card.task, card.action, card.result].join(" "));
+    const score = [...own].filter((w) => said.has(w)).length;
+    if (score > bestScore) { best = i; bestScore = score; }
+  });
+  return best;
+}
+
+$("expHintBtn").addEventListener("click", () => {
+  if (!$("expHint").hidden) {   // pressing it again closes the hint
+    setHintOpen(false);
     return;
   }
+  setHintOpen(true);
+  const known = session.hints[session.index];
+  if (known && cards[known.card]) showHint(cards[known.card], known.reason, known.chosen);
+  else pickHint([]);
+});
 
-  body.textContent = "Finding an experience that fits…";
+// Asks the AI for the card that fits this question best. exclude: card indexes to leave out.
+async function pickHint(exclude) {
+  const body = $("expHintBody");
+  const index = session.index;
+  const choices = cards.map((card, i) => i).filter((i) => !exclude.includes(i));
+  if (!choices.length) return;
+  const hint = $("expHint");
+  // Keep the current card on screen (faded) while loading, so the box doesn't collapse.
+  if (body.querySelector("h3")) {
+    hint.classList.add("loading");
+    hint.style.minHeight = hint.offsetHeight + "px";
+  } else {
+    body.textContent = "Finding an experience that fits…";
+  }
+  // Prefer cards not already suggested for other questions this session.
   const used = Object.entries(session.hints)
     .filter(([q]) => Number(q) !== index)
-    .map(([, h]) => h.card);
+    .map(([, h]) => choices.indexOf(h.card))
+    .filter((i) => i !== -1);
   try {
     const data = await postJson("/api/pick-experience", {
       question: currentQuestion().original,
-      cards: cards,
+      cards: choices.map((i) => cards[i]),
       used: [...new Set(used)]
     });
-    session.hints[index] = { card: data.index, reason: data.reason };
-    showHint(cards[data.index], data.reason);
+    const card = choices[data.index] ?? choices[0];
+    session.hints[index] = { card: card, reason: data.reason };
+    showHint(cards[card], data.reason);
   } catch (err) {
     body.textContent = connectionMessage(err);
+  } finally {
+    // The box never shrinks back on this question, so the camera below doesn't jump.
+    hint.classList.remove("loading");
   }
+}
+
+// "Get another experience": a different card from the one showing.
+$("expHintAnother").addEventListener("click", () => {
+  const current = session.hints[session.index];
+  pickHint(current ? [current.card] : []);
 });
 
-function showHint(card, reason) {
+// chosen: this is the experience the user picked to practice.
+function showHint(card, reason, chosen) {
+  $("expHintLabel").textContent = chosen ? "The experience you chose" : "An experience you could use";
+  $("expHintAnother").disabled = cards.length < 2;
+  $("expHintAnother").title = cards.length < 2 ? "No other experiences yet" : "Get another experience";
   const body = $("expHintBody");
   body.textContent = "";
   body.append(el("h3", "", card.title));
@@ -1335,7 +1550,7 @@ function showHint(card, reason) {
     });
 }
 
-$("expHintClose").addEventListener("click", () => ($("expHint").hidden = true));
+$("expHintClose").addEventListener("click", () => setHintOpen(false));
 
 
 /* =====================================================
@@ -1482,11 +1697,12 @@ async function showJobAdvice(job) {
 }
 
 // Opens Set up for "A particular job", filled in with this job (or empty to add a new one).
-// focus (optional): a skill to practice for this job.
-function practiceForJob(title, description, focus) {
+// areas (optional): skills to practice for this job.
+function practiceForJob(title, description, areas) {
   session = null;
-  nextFocus = focus || "";
-  nextFocusLabel = "";
+  areas = areas || [];
+  nextFocus = areas.join(", ");
+  focusInfo = areas.length ? { kind: "skills", job: title || "this job", areas: areas } : null;
   go("setup");
   setRadio("focus", "job");
   $("jobTitle").value = title;
@@ -1507,13 +1723,34 @@ function showSessionModal(title, body) {
   $("sessionModal").showModal();
 }
 
+const ORDINAL = ["First", "Second", "Third", "Fourth", "Fifth"];
+
+// Lists every try at a question: just the answer if there was one try,
+// or "First try (typed)", "Second try (spoken)"… if it was redone.
+function appendTries(item, r, withFeedback) {
+  const tries = r ? (r.earlier || []).concat(r) : [];
+  if (!tries.length) {
+    item.append(el("p", "muted try-text", "Skipped"));
+    return;
+  }
+  tries.forEach((t, n) => {
+    const block = el("div", "try");
+    if (tries.length > 1) {
+      const how = t.mode === "type" ? "typed" : t.mode === "speak" ? "spoken" : "";
+      block.append(el("p", "try-label", `${ORDINAL[n] || n + 1 + "th"} try${how ? " (" + how + ")" : ""}`));
+    }
+    block.append(el("p", "muted try-text", t.answer || "Skipped"));
+    if (withFeedback && t.feedback && t.feedback.to_improve) block.append(el("p", "small", "Area to improve: " + t.feedback.to_improve));
+    item.append(block);
+  });
+}
+
 function sessionDetails(saved) {
   const list = el("ol", "answer-list");
   (saved.results || []).forEach((r) => {
     const item = el("li");
-    item.append(el("strong", "", r.question.original), el("br"));
-    item.append(el("span", "", r.answer || "Skipped"));
-    if (r.feedback && r.feedback.to_improve) item.append(el("p", "muted", "Area to improve: " + r.feedback.to_improve));
+    item.append(el("strong", "", r.question.original));
+    appendTries(item, r, true);
     list.append(item);
   });
   return list;
@@ -1527,15 +1764,15 @@ function chosenFocus() {
 }
 
 $("practiceFocus").addEventListener("click", () => {
-  const focus = chosenFocus().join(", ");
-  // On a job tab, practice this skill for that job.
+  const areas = chosenFocus();
+  // On a job tab, practice these skills for that job.
   const job = jobsPracticed(load("starstruck.sessions", [])).find((j) => j.key === progressTab);
   if (job) {
-    practiceForJob(job.title.startsWith("Job ") ? "" : job.title, job.description, focus);
+    practiceForJob(job.title.startsWith("Job ") ? "" : job.title, job.description, areas);
     return;
   }
-  nextFocus = focus;
-  nextFocusLabel = "";
+  nextFocus = areas.join(", ");
+  focusInfo = { kind: "skills", job: null, areas: areas };
   session = null;
   go("setup");
   setRadio("focus", "general");

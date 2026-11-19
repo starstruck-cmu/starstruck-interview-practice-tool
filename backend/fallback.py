@@ -142,11 +142,21 @@ def feedback(answer: str, small_talk: bool = False) -> dict:
     if words < 40:
         growth_tags.append("adding detail")
 
+    # A STAR-shaped script from their own sentences, with placeholders for missing parts.
+    # Their own sentences stay as they are; added parts are wrapped in {{ }} so the page can underline them.
+    improved = " ".join([
+        situation or "{{[Where were you, and what was happening?]}}",
+        "{{[What needed to be done?]}}",
+        action or "{{[What did you do yourself? Start with \"I\".]}}",
+        result or "{{As a result, [what changed afterwards].}}",
+    ])
+
     return {
         "what_worked": what_worked,
         "to_improve": to_improve,
         "highlights": highlights,
         "next_step": to_improve,
+        "improved_answer": improved,
         "scores": {"clarity": clarity, "structure": structure},
         "strength_tags": strength_tags,
         "growth_tags": growth_tags,

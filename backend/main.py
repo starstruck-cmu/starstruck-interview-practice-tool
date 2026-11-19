@@ -37,7 +37,7 @@ DEFAULT_PROMPT = (
     "Focus on the content of their answers rather than communication style, eye contact, or other nonverbal behaviors. "
     "Explain what the interviewer is trying to assess, identify specific strengths and areas for improvement, "
     "and suggest practical changes the user can make. "
-    "Do not rewrite the user's answer; quote their own words when pointing out what worked or what to improve. "
+    "In your notes, quote the user's own words when pointing out what worked or what to improve. "
     "Use clear, direct, encouraging language without vague praise, unnecessary criticism, "
     "or assumptions about the user's background."
 )
@@ -57,6 +57,7 @@ Return only JSON in this shape:
     }
   ],
   "next_step": "one sentence the user can act on in their next attempt",
+  "improved_answer": "the user's own answer with the smallest changes needed to fix the 'improve' highlights, in first person. Copy their sentences exactly wherever they are fine; only add or change what an 'improve' highlight asks for. Do not invent facts: where a detail is missing, write a short placeholder in [square brackets], e.g. [what changed afterwards]. Wrap every part you added or changed in double curly braces, e.g. {{As a result, [what changed afterwards].}}. Do not wrap words you copied unchanged.",
   "scores": {"clarity": 0-100, "structure": 0-100},
   "strength_tags": ["2-4 word skill shown, e.g. 'setting the scene'"],
   "growth_tags": ["2-4 word area to grow, e.g. 'describing results'"]
