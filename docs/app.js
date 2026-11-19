@@ -39,7 +39,7 @@ const MAX_FILE_MB = 10;
    this browser only (localStorage). Nothing is stored on the server.
    ===================================================== */
 
-const DEFAULT_PREFS = { input: "type", count: 3, smallTalk: false, camera: false };
+const DEFAULT_PREFS = { input: "speak", count: 3, smallTalk: false };
 
 let prefs = { ...DEFAULT_PREFS, ...load("starstruck.prefs", {}) };
 let resume = load("starstruck.resume", null);     // { name, text }
@@ -48,7 +48,9 @@ let currentView = "home";
 let lastView = "home";                             // where Preferences goes back to
 let preparing = false;                             // true while questions are being written
 let cards = load("starstruck.stories", []);       // experience cards: { title, situation, task, action, result, skills }
-let nextFocus = "";                                // an area to practice, chosen on the Progress page
+let nextFocus = "";                                // an area to practice, sent to the AI when writing questions
+let nextFocusLabel = "";                           // the short name for it shown on Set up
+let coachMinimized = load("starstruck.coachMin", false);   // coach tucked into a tab on the right
 
 
 /* =====================================================
@@ -140,6 +142,7 @@ function unlocked() {
 }
 
 function show(view) {
+  if (view !== "practice" && tourIndex >= 0) endTour();
   currentView = view;
   if (view !== "preferences") lastView = view;
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== "view-" + view));
@@ -150,6 +153,7 @@ function show(view) {
     $("feedbackSide").append($("companion"));
     $("companion").hidden = false;
   }
+  updateCoach();
 
   const current = STEP_ORDER.indexOf(STEP_FOR_VIEW[lastView]);
   const open = unlocked();
@@ -267,11 +271,73 @@ document.addEventListener("click", (e) => {
 
 const dropzone = $("dropzone");
 
+// Returning users (anyone with a saved session) get a dashboard; new users get the upload page.
 function renderHome() {
   const hasResume = Boolean(resume && resume.text);
+  const returning = load("starstruck.sessions", []).length > 0;
   $("resumeChip").hidden = !hasResume;
   $("resumeName").textContent = hasResume ? resume.name : "";
+
+  $("homeNew").hidden = returning;
+  $("homeReturning").hidden = !returning;
+  $(returning ? "returningUploadSlot" : "newUploadSlot").append($("uploadCard"));
+  $("uploadCard").classList.toggle("compact", returning);
+  $("uploadCard").classList.toggle("no-file", !hasResume);
+  // Returning users see their current file plus a small box to drop a new one.
+  $("replaceResume").hidden = true;
+  $("dropText").textContent = returning && hasResume ? "Drop a new resume here" : "Drag and drop your resume here";
+  $("uploadTitle").textContent = returning ? (hasResume ? "Resume on file" : "No resume on file") : "Upload your resume";
+
+  if (returning) {
+    drawWeek($("weekSummary"), $("weekChart"), load("starstruck.sessions", []), false);
+    $("dashPractice").disabled = !hasResume;
+    $("dashPractice").title = hasResume ? "" : "Upload your resume first";
+  }
   if (currentView === "home") renderArrows();
+}
+
+$("dashPractice").addEventListener("click", () => go("setup"));
+
+// Bar chart of minutes practiced on each day of this week (Monday to Sunday).
+// withValues adds the number of minutes above each bar.
+function drawWeek(summaryEl, chartEl, sessions, withValues) {
+  const now = new Date();
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const minutes = [0, 0, 0, 0, 0, 0, 0];
+  const practiced = [false, false, false, false, false, false, false];
+  sessions.forEach((saved) => {
+    const day = Math.floor((new Date(saved.date) - monday) / 86400000);
+    if (day < 0 || day > 6) return;
+    minutes[day] += saved.minutes || 0;
+    practiced[day] = true;
+  });
+
+  const total = minutes.reduce((a, b) => a + b, 0);
+  const days = practiced.filter(Boolean).length;
+  summaryEl.textContent = days
+    ? `This week: ${total} minute${total === 1 ? "" : "s"} across ${days} day${days === 1 ? "" : "s"}`
+    : "No practice yet this week.";
+
+  chartEl.textContent = "";
+  const max = Math.max(...minutes, 1);
+  ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((name, i) => {
+    const col = el("div", "week-col");
+    const bar = el("div", "week-bar" + (minutes[i] ? "" : " empty"));
+    bar.style.height = (minutes[i] ? Math.max(6, (minutes[i] / max) * 100) : 0) + "%";
+    bar.title = `${name}: ${minutes[i]} minute${minutes[i] === 1 ? "" : "s"}`;
+    const track = el("div", "week-track");
+    if (withValues) {
+      const stack = el("div", "week-stack");
+      stack.style.height = "100%";
+      stack.append(el("span", "week-value", String(minutes[i])), bar);
+      track.append(stack);
+    } else {
+      track.append(bar);
+    }
+    col.append(track, el("span", "week-day", name));
+    col.setAttribute("aria-label", bar.title);
+    chartEl.append(col);
+  });
 }
 
 async function uploadResume(file) {
@@ -337,10 +403,13 @@ function renderSetup() {
   setRadio("setupInput", prefs.input);
   setRadio("setupCount", String(prefs.count));
   $("setupSmallTalk").checked = prefs.smallTalk;
-  $("setupCamera").checked = prefs.camera;
+  // New users (no saved sessions yet) get the tour switched on and marked "recommended".
+  const newUser = load("starstruck.sessions", []).length === 0;
+  $("setupTour").checked = newUser;
+  $("tourRec").hidden = !newUser;
   $("setupStatus").textContent = "";
   $("focusNote").hidden = !nextFocus;
-  $("focusNote").textContent = nextFocus ? "Focus: " + nextFocus : "";
+  $("focusNote").textContent = nextFocus ? "Focus: " + (nextFocusLabel || nextFocus) : "";
   updateSetup();
 }
 
@@ -377,8 +446,7 @@ async function startPractice() {
   prefs = {
     input: radioValue("setupInput"),
     count: Number(radioValue("setupCount")),
-    smallTalk: $("setupSmallTalk").checked,
-    camera: $("setupCamera").checked
+    smallTalk: $("setupSmallTalk").checked
   };
   save("starstruck.prefs", prefs);
 
@@ -398,6 +466,7 @@ async function startPractice() {
     if (!data.questions.length) throw new Error("No questions came back. Please try again.");
     preparing = false;
     startSession(data.questions, jobTitle, jobDescription);
+    if ($("setupTour").checked) startTour();
   } catch (err) {
     preparing = false;
     $("setupStatus").textContent = connectionMessage(err);
@@ -421,10 +490,11 @@ function startSession(questions, jobTitle, jobDescription) {
     index: 0,
     results: [],
     mode: prefs.input,
-    camera: prefs.camera,
+    camera: true,   // the camera starts on; the user can turn it off on the practice page
     finished: false,
     saved: false,
-    hints: {}   // question index -> experience card suggested for it
+    hints: {},   // question index -> experience card suggested for it
+    startedAt: Date.now()
   };
   startQuestion("");
 }
@@ -442,7 +512,7 @@ function startQuestion(draft, keepChat) {
   show("practice");
   renderPractice();
   renderChat();
-  if (session.camera) startPreview();
+  if (session.mode === "speak" && session.camera) startPreview();
 }
 
 function currentQuestion() {
@@ -459,12 +529,14 @@ function hasUnsentAnswer() {
     ($("answer").value.trim() !== "" || session.stage === "recording");
 }
 
+const HINT_LABEL = "Hint: see it in plain language";
+
 // Fills a question card. The hint button flips it to the plain-language side.
 function setFlip(prefix, q) {
   const card = $(prefix + "Flip");
   card.classList.remove("flipped");
   card.querySelector(".hint-btn").setAttribute("aria-pressed", "false");
-  card.querySelector(".hint-label").textContent = "Hint";
+  card.querySelector(".hint-label").textContent = HINT_LABEL;
   card.querySelector(".flip-back").setAttribute("aria-hidden", "true");
   card.querySelector(".flip-front").removeAttribute("aria-hidden");
   $(prefix + "Text").textContent = q.original;
@@ -477,7 +549,7 @@ document.querySelectorAll(".hint-btn").forEach((button) => {
     const card = button.closest(".flip");
     const flipped = card.classList.toggle("flipped");
     button.setAttribute("aria-pressed", String(flipped));
-    button.querySelector(".hint-label").textContent = flipped ? "Original" : "Hint";
+    button.querySelector(".hint-label").textContent = flipped ? "Back to the original question" : HINT_LABEL;
     card.querySelector(".flip-back").setAttribute("aria-hidden", String(!flipped));
     card.querySelector(".flip-front").setAttribute("aria-hidden", String(flipped));
   });
@@ -489,7 +561,7 @@ function renderPractice() {
   const waiting = stage === "loading" || stage === "error";
   const busy = stage === "recording" || stage === "transcribing";
 
-  $("practiceCounter").textContent = `Question ${session.index + 1} of ${session.questions.length}`;
+  $("practiceCounter").textContent = `Question ${session.index + 1} of ${session.questions.length} · take your time`;
   $("practiceTitle").textContent = stage === "review" ? "Review your answer" : "Interview practice";
   $("noticeMic").hidden = stage !== "mic";
 
@@ -507,6 +579,7 @@ function renderPractice() {
     stage === "review" ? "Record again" :
     stage === "mic" ? "Try again" : "Record";
   $("recBtn").setAttribute("aria-label", $("recLabel").textContent);
+  $("recRecommended").hidden = $("recLabel").textContent !== "Record";
   $("cameraToggle").disabled = busy;
   $("cameraToggle").setAttribute("aria-pressed", String(session.camera));
   $("cameraLabel").textContent = session.camera ? "Camera on" : "Camera off";
@@ -524,6 +597,7 @@ function renderPractice() {
   $("loadingPanel").hidden = stage !== "loading";
   $("errorPanel").hidden = stage !== "error";
   $("companion").hidden = waiting;
+  updateCoach();
 
   renderArrows();
 }
@@ -541,6 +615,7 @@ $("recBtn").addEventListener("click", () => {
 
 $("typeBtn").addEventListener("click", () => {
   session.mode = "type";
+  stopPreview();
   if (session.stage !== "review") session.stage = "answer";
   renderPractice();
   $("answer").focus();
@@ -616,7 +691,9 @@ function finishSession() {
     const sessions = load("starstruck.sessions", []);
     sessions.push({
       date: new Date().toISOString(),
+      minutes: Math.max(1, Math.round((Date.now() - session.startedAt) / 60000)),
       jobTitle: session.jobTitle,
+      jobDescription: session.jobDescription,
       general: !session.jobDescription,
       results: session.results.filter(Boolean)
     });
@@ -842,6 +919,26 @@ function plainText(text) {
     .trim();
 }
 
+// Minimize tucks the coach into a tab on the right edge; the tab opens it again.
+function updateCoach() {
+  $("companion").classList.toggle("minimized", coachMinimized);
+  const onPage = currentView === "practice" || currentView === "feedback";
+  $("coachTab").hidden = !(coachMinimized && onPage && !$("companion").hidden);
+}
+
+function setCoachMinimized(value) {
+  coachMinimized = value;
+  save("starstruck.coachMin", value);
+  updateCoach();
+  if (tourIndex >= 0) showTourStep();
+}
+
+$("coachMinimize").addEventListener("click", () => setCoachMinimized(true));
+$("coachTab").addEventListener("click", () => {
+  setCoachMinimized(false);
+  $("chatInput").focus();
+});
+
 // The companion's profile picture: a small robot.
 function robotAvatar() {
   const avatar = el("span", "avatar");
@@ -994,62 +1091,121 @@ function renderSummary() {
    ===================================================== */
 
 let editingCard = -1;   // index of the card in the editor, or -1 for a new card
+let cardsWork = null;   // while building or updating: { placeholders: number }
+let cardsChanged = {};  // card index -> "new" or "updated", highlighted after a build or update
 
 function saveCards() {
   save("starstruck.stories", cards);
 }
 
+const SOURCE_LABEL = { practice: "From practice", resume: "From resume" };
+
+// A question for the most important missing STAR part, or "" when the story is complete.
+function cardQuestion(card) {
+  if (card.result && card.situation && card.action) return "";
+  if (card.question) return card.question;
+  if (!card.result) return "What changed after you did this?";
+  if (!card.situation) return "Where were you, and what was happening?";
+  return "What did you do yourself?";
+}
+
 function renderExperience() {
+  $("cardsWorking").hidden = !cardsWork;
+  // Update appears only when there's new practice since the last build or update.
+  const fresh = newAnswers().length;
+  $("updateCards").hidden = !fresh;
+  // Build is only offered before the first build; after that, Update brings cards up to date.
+  $("buildCards").hidden = Boolean(load("starstruck.cardsUpdatedAt", null)) && cards.length > 0;
+  $("cardsUpToDate").hidden = !($("buildCards").hidden && !fresh);
+  $("updateCardsLabel").textContent = `Update cards (${fresh} new answer${fresh === 1 ? "" : "s"})`;
   const grid = $("cardsGrid");
   grid.textContent = "";
-  $("cardsStatus").textContent = cards.length ? "" : "No cards yet. Build them from your resume and answers, or add one yourself.";
+  $("cardsStatus").textContent = cards.length || cardsWork ? "" : "No cards yet. Build them from your resume and past answers, or create one yourself.";
 
   cards.forEach((card, i) => {
     const note = el("article", "note-card");
-    note.append(el("h3", "", card.title));
-    [["Situation", card.situation], ["Task", card.task], ["Action", card.action], ["Result", card.result]]
+    const change = cardsChanged[i];
+    if (change) note.classList.add("just-changed");
+    const head = el("div", "note-head");
+    head.append(el("h3", "", card.title));
+    if (change) head.append(el("span", "change-tag", change === "new" ? "New" : "Updated"));
+    head.append(el("span", "source-tag", SOURCE_LABEL[card.source] || "Added by you"));
+    note.append(head);
+
+    // A short summary of the STAR parts the card has.
+    const summary = [["Situation", card.situation], ["Task", card.task], ["Action", card.action], ["Result", card.result]]
       .filter(([, text]) => text)
-      .forEach(([label, text]) => {
-        const line = el("p", "note-line");
-        line.append(el("strong", "", label + ": "), text);
-        note.append(line);
-      });
-    const tags = el("div", "tags");
-    (card.skills || []).forEach((skill) => tags.append(el("span", "tag", skill)));
-    note.append(tags);
-    const edit = el("button", "link-btn", "Edit");
+      .map(([label, text]) => `${label}: ${text}`)
+      .join(" ");
+    if (summary) note.append(el("p", "note-summary", summary));
+
+    const question = cardQuestion(card);
+    if (question) note.append(el("p", "note-question", "Expand: " + question));
+
+    const actions = el("div", "note-actions");
+    const practice = el("button", "btn btn-primary btn-small", "Practice this experience");
+    practice.addEventListener("click", () => practiceCard(card));
+    const edit = el("button", "btn btn-small", "Edit");
     edit.addEventListener("click", () => openCard(i));
-    note.append(edit);
+    actions.append(practice, edit);
+    note.append(actions);
     grid.append(note);
   });
 
-  const add = el("button", "note-card note-add", "+ Add an experience");
-  add.addEventListener("click", () => openCard(-1));
-  grid.append(add);
+  // Shimmering placeholder cards where new cards are coming in.
+  for (let n = 0; cardsWork && n < cardsWork.placeholders; n++) {
+    const ghost = el("div", "note-card skeleton-card");
+    ghost.setAttribute("aria-hidden", "true");
+    ["w60", "w100", "w85", "w70", "btn"].forEach((size) => ghost.append(el("span", "skeleton " + size)));
+    grid.append(ghost);
+  }
 }
 
-// Collects every answer the user has given, from saved sessions and the current one.
-function allAnswers() {
-  const results = load("starstruck.sessions", []).flatMap((s) => s.results || [])
-    .concat(session ? session.results.filter(Boolean) : []);
+$("addCard").addEventListener("click", () => openCard(-1));
+
+// Starts a session whose questions fit this experience.
+function practiceCard(card) {
+  nextFocus = `my experience "${card.title}"` + (card.action ? ` (${card.action})` : "");
+  nextFocusLabel = card.title;
+  session = null;
+  go("setup");
+}
+
+// Every answer the user has given in saved sessions, optionally only those saved after a date.
+function allAnswers(since) {
   const seen = new Set();
-  return results
+  return load("starstruck.sessions", [])
+    .filter((saved) => !since || new Date(saved.date) > new Date(since))
+    .flatMap((saved) => saved.results || [])
     .filter((r) => r.answer && !seen.has(r.answer) && seen.add(r.answer))
     .map((r) => ({ question: r.question.original, answer: r.answer }));
 }
 
-const BUILD_LABEL = "Build or update cards from resume and past question responses";
+// Answers from practice done since the cards were last built or updated.
+function newAnswers() {
+  const since = load("starstruck.cardsUpdatedAt", null);
+  return since ? allAnswers(since) : [];
+}
 
-$("buildCards").addEventListener("click", async () => {
-  const button = $("buildCards");
+// Build: uses the resume and all past answers. Update: only answers from new practice.
+async function runCards(mode) {
+  const building = mode === "build";
+  const button = $(building ? "buildCards" : "updateCards");
+  const label = $(building ? "buildCardsLabel" : "updateCardsLabel");
+  const idle = label.textContent;
   button.disabled = true;
   button.classList.add("busy");
-  $("buildCardsLabel").textContent = "Building…";
-  $("cardsStatus").textContent = "Building cards from your resume and past answers…";
+  label.textContent = building ? "Building…" : "Updating…";
+  $("cardsStatus").textContent = "";
+  $("cardsWorkingTitle").textContent = building ? "Building your experience cards…" : "Updating your experience cards…";
+  const answers = building ? allAnswers() : newAnswers();
+  cardsWork = { placeholders: building ? 3 : Math.min(3, Math.max(1, answers.length)) };
+  cardsChanged = {};
+  if (currentView === "experience") renderExperience();
   try {
     const data = await postJson("/api/experiences", {
-      resume: resume ? resume.text : "",
-      answers: allAnswers(),
+      resume: building && resume ? resume.text : "",
+      answers: answers,
       existing: cards
     });
     // Cards with an id update that card; the rest are new (skipped if the title already exists).
@@ -1057,29 +1213,46 @@ $("buildCards").addEventListener("click", async () => {
     const titles = new Set(cards.map((c) => c.title.toLowerCase()));
     data.cards.forEach((c) => {
       const card = { title: c.title || "", situation: c.situation || "", task: c.task || "",
-                     action: c.action || "", result: c.result || "", skills: c.skills || [] };
+                     action: c.action || "", result: c.result || "", skills: c.skills || [],
+                     source: c.source || "", question: c.question || "" };
       if (Number.isInteger(c.id) && cards[c.id]) {
         cards[c.id] = { ...cards[c.id], ...card, title: card.title || cards[c.id].title };
+        cardsChanged[c.id] = "updated";
         updated += 1;
       } else if (card.title && !titles.has(card.title.toLowerCase())) {
         titles.add(card.title.toLowerCase());
         cards.push(card);
+        cardsChanged[cards.length - 1] = "new";
         added += 1;
       }
     });
     saveCards();
-    renderExperience();
-    $("cardsStatus").textContent = added || updated
-      ? `Added ${added} and updated ${updated} card${added + updated === 1 ? "" : "s"}.`
+    save("starstruck.cardsUpdatedAt", new Date().toISOString());
+    cardsWork = null;
+    if (currentView === "experience") renderExperience();
+    // The New / Updated highlight fades after a few seconds.
+    setTimeout(() => {
+      cardsChanged = {};
+      document.querySelectorAll(".just-changed").forEach((n) => n.classList.add("settled"));
+    }, 6000);
+    const plural = (n) => `${n} card${n === 1 ? "" : "s"}`;
+    const done = [added && `added ${plural(added)}`, updated && `updated ${plural(updated)}`].filter(Boolean);
+    $("cardsStatus").textContent = done.length
+      ? done.join(" and ").replace(/^./, (c) => c.toUpperCase()) + "."
       : "Your cards are up to date.";
   } catch (err) {
+    cardsWork = null;
+    if (currentView === "experience") renderExperience();
     $("cardsStatus").textContent = connectionMessage(err);
   } finally {
     button.disabled = false;
     button.classList.remove("busy");
-    $("buildCardsLabel").textContent = BUILD_LABEL;
+    label.textContent = idle;
   }
-});
+}
+
+$("buildCards").addEventListener("click", () => runCards("build"));
+$("updateCards").addEventListener("click", () => runCards("update"));
 
 function openCard(index) {
   editingCard = index;
@@ -1105,7 +1278,7 @@ $("cardForm").addEventListener("submit", () => {
     skills: $("cardSkills").value.split(",").map((t) => t.trim()).filter(Boolean)
   };
   if (editingCard === -1) cards.push(card);
-  else cards[editingCard] = card;
+  else cards[editingCard] = { ...cards[editingCard], ...card };   // keeps where the card came from
   saveCards();
   renderExperience();
 });
@@ -1170,13 +1343,6 @@ $("expHintClose").addEventListener("click", () => ($("expHint").hidden = true));
    Built from the sessions the user chose to save.
    ===================================================== */
 
-function sessionScores(saved) {
-  const scored = (saved.results || []).map((r) => r.feedback && r.feedback.scores).filter(Boolean);
-  if (!scored.length) return null;
-  const avg = (key) => Math.round(scored.reduce((sum, sc) => sum + (Number(sc[key]) || 0), 0) / scored.length);
-  return { clarity: avg("clarity"), structure: avg("structure") };
-}
-
 // Most common tags across saved feedback, most frequent first.
 function topTags(sessions, key, limit) {
   const counts = {};
@@ -1194,28 +1360,77 @@ function sessionName(saved, i) {
   return `Session ${i + 1} · ${date}` + (saved.jobTitle ? ` · ${saved.jobTitle}` : "");
 }
 
+let progressTab = "all";   // "all" or a job key
+
+// Sessions grouped by job (title, or the start of the description). General practice has no job.
+function jobKey(saved) {
+  return (saved.jobTitle || "").trim().toLowerCase() || (saved.jobDescription || "").trim().slice(0, 60).toLowerCase();
+}
+
+function jobsPracticed(sessions) {
+  const jobs = [];
+  sessions.forEach((saved) => {
+    const key = jobKey(saved);
+    if (!key || jobs.some((j) => j.key === key)) return;
+    jobs.push({ key, title: saved.jobTitle || `Job ${jobs.length + 1}`, description: saved.jobDescription || "" });
+  });
+  return jobs;
+}
+
 function renderProgress() {
-  const sessions = load("starstruck.sessions", []);
-  $("progressEmpty").hidden = sessions.length > 0;
-  $("progressContent").hidden = !sessions.length;
-  if (!sessions.length) return;
+  const all = load("starstruck.sessions", []);
+  const jobs = jobsPracticed(all);
+  if (progressTab !== "all" && !jobs.some((j) => j.key === progressTab)) progressTab = "all";
+  const job = jobs.find((j) => j.key === progressTab);
+  const sessions = job ? all.filter((saved) => jobKey(saved) === job.key) : all;
 
-  drawChart(sessions);
+  // Tabs
+  const tabs = $("jobTabs");
+  tabs.textContent = "";
+  [{ key: "all", title: "All practice" }].concat(jobs).forEach((j) => {
+    const tab = el("button", "job-tab", j.title);
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(j.key === progressTab));
+    tab.addEventListener("click", () => { progressTab = j.key; renderProgress(); });
+    tabs.append(tab);
+  });
+  const add = el("button", "job-tab job-tab-add", "+ Add job description");
+  add.addEventListener("click", () => practiceForJob("", ""));
+  tabs.append(add);
 
+  $("progressEmpty").hidden = all.length > 0;
+  $("progressContent").hidden = !all.length;
+  $("adviceCard").hidden = true;
+  if (!all.length) return;
+
+  drawWeek($("progWeekSummary"), $("progWeekChart"), sessions, true);
+
+  // On a job tab, the headings say they're for this role.
+  const forRole = job ? " for this role" : "";
+  $("strengthsTitle").textContent = "Strengths in your feedback" + forRole;
+  $("growthTitle").textContent = "Areas to improve" + forRole;
+  $("focusTitle").textContent = "Choose a next focus" + forRole;
+  $("practiceFocus").textContent = "Practice focused on these skills" + forRole;
+
+  // Advice card, only for a specific job
+  $("adviceCard").hidden = !job;
+  if (job) showJobAdvice(job);
+
+  // Strengths and areas to improve
   const fill = (id, items, empty) => {
     const list = $(id);
     list.textContent = "";
     (items.length ? items : [empty]).forEach((t) => list.append(el("li", "", t)));
   };
   fill("progStrengths", topTags(sessions, "strength_tags", 3), "Keep practicing to see your strengths here.");
-  // Areas to improve come from the most recent session, so they show where you are now.
-  const growth = topTags(sessions.slice(-1), "growth_tags", 3);
+  const growth = topTags(sessions.slice(-1), "growth_tags", 3);   // from the latest session: where you are now
   fill("progGrowth", growth, "No areas to improve found yet.");
 
-  // All sessions, newest first, each with a View button.
+  // Sessions, newest first, each with a View button
+  $("sessionsTitle").textContent = job ? `Sessions for ${job.title}` : "All sessions";
   const list = $("sessionList");
   list.textContent = "";
-  sessions.map((saved, i) => [saved, i]).reverse().forEach(([saved, i]) => {
+  all.map((saved, i) => [saved, i]).filter(([saved]) => sessions.includes(saved)).reverse().forEach(([saved, i]) => {
     const answered = (saved.results || []).filter((r) => r.answer).length;
     const item = el("li");
     item.append(el("span", "", `${sessionName(saved, i)} · ${answered} answer${answered === 1 ? "" : "s"}`));
@@ -1225,58 +1440,65 @@ function renderProgress() {
     list.append(item);
   });
 
+  // Next focus
   const choices = $("focusChoices");
   choices.textContent = "";
+  // Pick one or more areas; the button needs at least one.
   growth.forEach((area, i) => {
     const option = el("label", "option");
     const input = el("input");
-    input.type = "radio";
+    input.type = "checkbox";
     input.name = "nextFocus";
     input.value = area;
     input.checked = i === 0;
+    input.addEventListener("change", () => {
+      $("practiceFocus").disabled = !chosenFocus().length;
+    });
     option.append(input, " " + area);
     choices.append(option);
   });
   $("practiceFocus").disabled = !growth.length;
+  if (!growth.length) choices.append(el("p", "muted", "Answer a few more questions to get a focus."));
 }
 
-// A small line chart of clarity and structure per saved session.
-function drawChart(sessions) {
-  const points = sessions.map(sessionScores);
-  const W = 520, H = 220, left = 40, right = 16, top = 16, bottom = 36;
-  const x = (i) => left + (sessions.length === 1 ? (W - left - right) / 2 : (i * (W - left - right)) / (sessions.length - 1));
-  const y = (v) => top + (1 - v / 100) * (H - top - bottom);
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", "Clarity and structure scores for each saved session");
-  const add = (tag, attrs, text) => {
-    const node = document.createElementNS(NS, tag);
-    Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
-    if (text) node.textContent = text;
-    svg.append(node);
-  };
-
-  [0, 50, 100].forEach((v) => {
-    add("line", { x1: left, x2: W - right, y1: y(v), y2: y(v), class: "grid-line" });
-    add("text", { x: left - 8, y: y(v) + 4, class: "axis", "text-anchor": "end" }, v + "%");
-  });
-  sessions.forEach((_, i) => add("text", { x: x(i), y: H - 12, class: "axis", "text-anchor": "middle" }, "Session " + (i + 1)));
-
-  [["clarity", "series-a"], ["structure", "series-b"]].forEach(([key, cls]) => {
-    const pts = points.map((p, i) => (p ? [x(i), y(p[key])] : null)).filter(Boolean);
-    if (pts.length > 1) add("polyline", { points: pts.map((p) => p.join(",")).join(" "), class: "line " + cls });
-    pts.forEach(([cx, cy]) => add("circle", { cx, cy, r: 5, class: "dot " + cls }));
-  });
-
-  const box = $("chart");
-  box.textContent = "";
-  box.append(svg);
-  const legend = el("div", "legend");
-  legend.append(el("span", "key series-a", "Clarity"), el("span", "key series-b", "Structure"));
-  box.append(legend);
+// The AI's advice for a job, kept in this browser so it isn't fetched again.
+async function showJobAdvice(job) {
+  $("adviceTitle").textContent = `Advice for ${job.title}`;
+  const saved = load("starstruck.jobAdvice", {});
+  if (saved[job.key]) {
+    $("adviceText").textContent = saved[job.key];
+    return;
+  }
+  $("adviceText").textContent = "Reading the job description…";
+  try {
+    const data = await postJson("/api/job-advice", { job_title: job.title, job_description: job.description });
+    const advice = plainText(data.advice);
+    saved[job.key] = advice;
+    save("starstruck.jobAdvice", saved);
+    if (progressTab === job.key) $("adviceText").textContent = advice;
+  } catch (err) {
+    if (progressTab === job.key) $("adviceText").textContent = connectionMessage(err);
+  }
 }
+
+// Opens Set up for "A particular job", filled in with this job (or empty to add a new one).
+// focus (optional): a skill to practice for this job.
+function practiceForJob(title, description, focus) {
+  session = null;
+  nextFocus = focus || "";
+  nextFocusLabel = "";
+  go("setup");
+  setRadio("focus", "job");
+  $("jobTitle").value = title;
+  $("jobDescription").value = description;
+  updateSetup();
+  if (!description) $("jobDescription").focus();
+}
+
+$("practiceRole").addEventListener("click", () => {
+  const job = jobsPracticed(load("starstruck.sessions", [])).find((j) => j.key === progressTab);
+  if (job) practiceForJob(job.title.startsWith("Job ") ? "" : job.title, job.description);
+});
 
 function showSessionModal(title, body) {
   $("sessionModalTitle").textContent = title;
@@ -1299,11 +1521,98 @@ function sessionDetails(saved) {
 
 $("sessionModalClose").addEventListener("click", () => $("sessionModal").close());
 
+// The areas ticked under "Choose a next focus".
+function chosenFocus() {
+  return [...document.querySelectorAll('input[name="nextFocus"]:checked')].map((i) => i.value);
+}
+
 $("practiceFocus").addEventListener("click", () => {
-  nextFocus = radioValue("nextFocus") || "";
+  const focus = chosenFocus().join(", ");
+  // On a job tab, practice this skill for that job.
+  const job = jobsPracticed(load("starstruck.sessions", [])).find((j) => j.key === progressTab);
+  if (job) {
+    practiceForJob(job.title.startsWith("Job ") ? "" : job.title, job.description, focus);
+    return;
+  }
+  nextFocus = focus;
+  nextFocusLabel = "";
   session = null;
   go("setup");
+  setRadio("focus", "general");
+  updateSetup();
 });
+
+
+/* =====================================================
+   PRACTICE TOUR
+   Three short steps the first time someone practices.
+   Each step points at one part of the Practice page.
+   ===================================================== */
+
+const TOUR = [
+  { target: () => $("controls"), title: "Answer the question",
+    text: "Press Record to speak your answer, or the keyboard to type it. There's no timer, so take as long as you need." },
+  { target: () => document.querySelector("#qFlip .hint-btn"), title: "Get a hint",
+    text: "Not sure what the question is asking? Press Hint to see it in plain language." },
+  { target: () => (coachMinimized ? $("coachTab") : $("companion")), title: "Ask your AI coach",
+    text: "Your AI coach can help you find an experience, name the skills the question is about, or plan your answer. Press Minimize to tuck it away on the right." }
+];
+let tourIndex = -1;
+
+function startTour() {
+  tourIndex = 0;
+  showTourStep();
+}
+
+function endTour() {
+  document.querySelectorAll(".tour-target").forEach((n) => n.classList.remove("tour-target"));
+  $("tour").hidden = true;
+  tourIndex = -1;
+  save("starstruck.tourDone", true);
+}
+
+function showTourStep() {
+  document.querySelectorAll(".tour-target").forEach((n) => n.classList.remove("tour-target"));
+  const step = TOUR[tourIndex];
+  const target = step.target();
+  if (!target || target.hidden || !target.getClientRects().length) {   // skip a step whose part of the page isn't showing
+    if (tourIndex < TOUR.length - 1) { tourIndex += 1; showTourStep(); } else endTour();
+    return;
+  }
+  target.classList.add("tour-target");
+  $("tourStep").textContent = `Tour step ${tourIndex + 1} of ${TOUR.length}`;
+  $("tourTitle").textContent = step.title;
+  $("tourText").textContent = step.text;
+  $("tourNext").textContent = tourIndex === TOUR.length - 1 ? "Got it" : "Next";
+  $("tour").hidden = false;
+  placeTour();
+  $("tourNext").focus();
+}
+
+// Puts the tooltip below the highlighted part, or above it if there's no room.
+function placeTour() {
+  if (tourIndex < 0) return;
+  const target = TOUR[tourIndex].target();
+  if (!target) return;
+  const tour = $("tour");
+  const r = target.getBoundingClientRect();
+  const t = tour.getBoundingClientRect();
+  const below = r.bottom + 12 + t.height < window.innerHeight;
+  let top = below ? r.bottom + 12 : r.top - t.height - 12;
+  let left = r.left + r.width / 2 - t.width / 2;
+  left = Math.max(12, Math.min(left, window.innerWidth - t.width - 12));
+  top = Math.max(12, top);
+  tour.style.top = top + "px";
+  tour.style.left = left + "px";
+}
+
+$("tourNext").addEventListener("click", () => {
+  if (tourIndex < 0) return;
+  if (tourIndex >= TOUR.length - 1) endTour();
+  else { tourIndex += 1; showTourStep(); }
+});
+$("tourSkip").addEventListener("click", endTour);
+window.addEventListener("resize", placeTour);
 
 
 /* =====================================================
@@ -1316,7 +1625,6 @@ $("prefsButton").addEventListener("click", () => {
   setRadio("prefInput", prefs.input);
   setRadio("prefCount", String(prefs.count));
   $("prefSmallTalk").checked = prefs.smallTalk;
-  $("prefCamera").checked = prefs.camera;
   $("prefsStatus").textContent = "";
   show("preferences");
 });
@@ -1325,15 +1633,13 @@ function savePreferences() {
   prefs = {
     input: radioValue("prefInput"),
     count: Number(radioValue("prefCount")),
-    smallTalk: $("prefSmallTalk").checked,
-    camera: $("prefCamera").checked
+    smallTalk: $("prefSmallTalk").checked
   };
   save("starstruck.prefs", prefs);
 
-  // Input method and camera apply to the current question straight away.
+  // The input method applies to the current question straight away.
   if (sessionActive() && lastView === "practice" && !["loading", "error", "recording", "transcribing"].includes(session.stage)) {
     session.mode = prefs.input;
-    session.camera = prefs.camera;
     session.stage = session.mode === "speak" && $("answer").value.trim() ? "review" : "answer";
   }
   closePreferences();
@@ -1344,7 +1650,7 @@ function closePreferences() {
   show(lastView);
   if (lastView === "practice" && sessionActive()) {
     renderPractice();
-    if (session.camera) startPreview();
+    if (session.mode === "speak" && session.camera) startPreview();
   }
 }
 

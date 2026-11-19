@@ -232,9 +232,14 @@ def skills_in(text: str) -> list:
 
 def card_from_text(text: str, title: str) -> dict:
     parts = sentences(text)
-    situation = first_match(parts, SITUATION_WORDS) or (parts[0] if parts else "")
     action = first_match(parts, ACTION_WORDS)
-    result = first_match([p for p in parts if p not in (situation, action)], RESULT_WORDS)
+    situation = first_match([p for p in parts if p != action], SITUATION_WORDS)
+    # The result comes after the action; anything else left over can set the scene.
+    after = parts[parts.index(action) + 1:] if action in parts else parts
+    result = first_match([p for p in after if p != situation], RESULT_WORDS) or \
+        next((p for p in after if p != situation), "")
+    if not situation:
+        situation = next((p for p in parts if p not in (action, result)), "")
     return {"title": title, "situation": situation, "task": "", "action": action,
             "result": result, "skills": skills_in(text)}
 
@@ -249,18 +254,29 @@ def words_of(card: dict) -> set:
     return set(re.findall(r"[a-z]{4,}", text.lower()))
 
 
+def follow_up(card: dict) -> str:
+    """One question for the most important missing STAR part, or "" if none is missing."""
+    if not card.get("result"):
+        return "What changed after you did this?"
+    if not card.get("situation"):
+        return "Where were you, and what was happening?"
+    if not card.get("action"):
+        return "What did you do yourself?"
+    return ""
+
+
 def experiences(resume: str, answers: list, existing: list = ()) -> list:
     """New cards, or updated existing ones (with "id"), from answers and resume lines."""
     found = []
     for question, answer in answers:
         if len(answer.split()) >= 8:
-            found.append(card_from_text(answer, short_title(answer)))
+            found.append(dict(card_from_text(answer, short_title(answer)), source="practice"))
     # Resume lines that read like accomplishments (bullets or lines with an action word).
     for line in resume.splitlines():
         line = line.strip(" -*\t")
-        if len(line.split()) >= 5 and re.search(r"\b(led|organiz|creat|built|managed|helped|coordinat|train|develop|plan)", line, re.IGNORECASE):
+        if len(line.split()) >= 5 and re.search(r"\b(led|organiz|creat|built|managed|helped|coordinat|train|develop|plan|taught|teach|design|locali|launch|improv|wrote)", line, re.IGNORECASE):
             found.append({"title": short_title(line), "situation": "", "task": "", "action": line,
-                          "result": "", "skills": skills_in(line)})
+                          "result": "", "skills": skills_in(line), "source": "resume"})
 
     out = []
     for card in found:
@@ -268,13 +284,14 @@ def experiences(resume: str, answers: list, existing: list = ()) -> list:
         match = next((i for i, old in enumerate(existing)
                       if len(words_of(card) & words_of(old)) >= max(3, len(words_of(card)) // 2)), None)
         if match is None:
-            out.append(card)
+            out.append(dict(card, question=follow_up(card)))
             continue
         old = existing[match]
         updated = {k: old.get(k) or card.get(k, "") for k in ("title", "situation", "task", "action", "result")}
         updated["skills"] = old.get("skills") or card["skills"]
         if any(updated[k] != old.get(k) for k in ("situation", "task", "action", "result")):
-            out.append(dict(updated, id=match))
+            out.append(dict(updated, id=match, source=old.get("source") or card.get("source", ""),
+                            question=follow_up(updated)))
     return out[:8]
 
 
@@ -291,3 +308,17 @@ def pick_experience(question: str, cards: list, used: list = ()) -> dict:
     # A used card loses 2 points: it still wins if it fits clearly better than the rest.
     best = max(range(len(cards)), key=lambda i: score(cards[i]) - (2 if i in used else 0))
     return {"index": best, "reason": "This one shares the most with the question."}
+
+
+# ---------- Advice for a specific job ----------
+
+def job_advice(title: str, description: str) -> str:
+    skills = [s for s in skills_in(description) if s != "work experience"]
+    role = title or "this role"
+    if skills:
+        listed = " and ".join(skills[:2])
+        return (f"The posting for {role} mentions {listed}. Practice one short story for each, "
+                "and end each one with a clear result. Something you may not think to practice: "
+                "explaining why you made the choices you did.")
+    return (f"Read the posting for {role} and pick two or three skills it asks for. Practice one short story "
+            "for each, and end each one with a clear result.")

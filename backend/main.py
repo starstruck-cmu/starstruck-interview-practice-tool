@@ -131,6 +131,8 @@ class Card(BaseModel):
     action: str = ""
     result: str = ""
     skills: list[str] = []
+    source: str = ""     # "resume" or "practice"
+    question: str = ""   # a follow-up question for the most important missing STAR part
 
 
 class ExperiencesRequest(BaseModel):
@@ -143,6 +145,11 @@ class PickRequest(BaseModel):
     question: str
     cards: list[Card]
     used: list[int] = []   # cards already suggested for other questions this session
+
+
+class JobAdviceRequest(BaseModel):
+    job_title: str = ""
+    job_description: str = ""
 
 
 class AdminLogin(BaseModel):
@@ -341,8 +348,12 @@ async def experiences(req: ExperiencesRequest):
         "- Add new cards (without an id) only for experiences not covered yet, from the answers or the resume.\n"
         "- Only use what they actually wrote; do not invent details. Leave a STAR part empty if unknown.\n"
         "- Return only cards that are new or changed. At most 8 new cards.\n"
+        "- source is \"practice\" if the experience came from a practice answer, otherwise \"resume\".\n"
+        "- question is one short, friendly question that would fill the most important missing or vague STAR part "
+        "(often the result), for example 'What changed for the students after the class?'. Leave it empty if the story is complete.\n"
         'Return only JSON: {"cards": [{"id": 0 (only for existing cards), "title": "3-6 words", '
-        '"situation": "...", "task": "...", "action": "...", "result": "...", "skills": ["2-3 skills"]}]}'
+        '"situation": "...", "task": "...", "action": "...", "result": "...", "skills": ["2-3 skills"], '
+        '"source": "practice" or "resume", "question": "..."}]}'
     )
     data = await call_gemini([{"text": prompt}], as_json=True)
     return {"cards": data.get("cards", [])}
@@ -373,6 +384,22 @@ async def pick_experience(req: PickRequest):
     if not isinstance(index, int) or not 0 <= index < len(req.cards):
         index = 0
     return {"index": index, "reason": data.get("reason", "")}
+
+
+# Short advice on what to practice for a specific job, based on its description.
+@app.post("/api/job-advice")
+async def job_advice(req: JobAdviceRequest):
+    if not AI_ENABLED:
+        return {"advice": fallback.job_advice(req.job_title, req.job_description)}
+    prompt = (
+        "You help an autistic or ADHD job seeker decide what to practice for a job interview.\n"
+        f"{job_context(req.job_title, req.job_description)}\n\n"
+        "In 2-3 short, plain sentences: name the main skills the posting asks for, suggest one kind of story "
+        "to practice (and to end it with a clear result), and add one thing they may not think to practice. "
+        "Plain text only, no markdown."
+    )
+    advice = await call_gemini([{"text": prompt}])
+    return {"advice": advice.strip()}
 
 
 @app.post("/api/admin/login")
